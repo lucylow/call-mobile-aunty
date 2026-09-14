@@ -1,0 +1,16 @@
+name: CALL-E V4
+on:
+  push:
+    paths: ['server/calle-v4/**','mobile/calle-v4/**','tests/**','drizzle/**']
+  pull_request:
+    paths: ['server/calle-v4/**','mobile/calle-v4/**','tests/**','drizzle/**']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx vitest run tests/calle-v4.integration.test.ts

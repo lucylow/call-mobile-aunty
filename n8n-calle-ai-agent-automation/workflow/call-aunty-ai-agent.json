@@ -1,0 +1,705 @@
+{
+  "name": "Call Aunty - AI Agent Phone Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "call-aunty-agent",
+        "responseMode": "responseNode"
+      },
+      "id": "trigger",
+      "name": "Call Aunty Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "call-aunty-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: normalize incoming Call Aunty request\nconst item = $json;\nconst contact = item.contact ?? {};\nreturn [{ json: {\n  requestId: String(item.requestId ?? $execution.id),\n  source: String(item.source ?? 'n8n'),\n  intent: String(item.intent ?? 'unknown'),\n  contact: { name: String(contact.name ?? ''), phone: String(contact.phone ?? ''), externalId: contact.externalId },\n  consent: String(item.consent ?? 'unknown'),\n  doNotContact: Boolean(item.doNotContact),\n  survey: item.survey,\n  context: item.context ?? {},\n} }];\n"
+      },
+      "id": "normalize",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: hard gate before CALL-E side effects\nconst x = $json;\nconst issues = [];\nif (!x.contact?.phone) issues.push('MISSING_PHONE');\nif (x.doNotContact) issues.push('CONTACT_IS_DNC');\nif (x.consent !== 'granted') issues.push('CALL_CONSENT_NOT_GRANTED');\nreturn [{ json: { ...x, allowed: issues.length === 0, policyIssues: issues } }];\n"
+      },
+      "id": "policy",
+      "name": "Policy Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.allowed}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-allowed",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {blocked:true, reason:$json.policyIssues, requestId:$json.requestId} }}"
+      },
+      "id": "blocked",
+      "name": "Blocked Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        900,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: build the CALL-E request without storing secrets in workflow data\nconst x = $json;\nif (!x.allowed) return [{ json: { ...x, callePayload: null } }];\nconst questions = x.survey?.questions ?? [];\nreturn [{ json: {\n  ...x,\n  callePayload: {\n    to: x.contact.phone,\n    contactName: x.contact.name,\n    intent: x.intent,\n    survey: questions.length ? { id: x.survey.id, questions } : undefined,\n    metadata: { requestId: x.requestId, source: x.source }\n  },\n  idempotencyKey: `call-aunty:${x.requestId}`\n} }];\n"
+      },
+      "id": "payload",
+      "name": "Build CALL-E Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: request-id idempotency + same-day contact/intent dedupe\nconst DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;\nconst x = $json;\nconst staticData = $getWorkflowStaticData('global');\nstaticData.calls = staticData.calls || {};\nconst now = Date.now();\n\nfor (const key of Object.keys(staticData.calls)) {\n  const rec = staticData.calls[key];\n  if (rec?.expiresAt && Date.parse(rec.expiresAt) <= now) delete staticData.calls[key];\n}\n\nconst requestKey = `req:${x.requestId}`;\nconst contactWindowKey = `contact:${String(x.contact?.phone ?? '').replace(/\\D/g, '')}:${x.intent}:${new Date(now).toISOString().slice(0, 10)}`;\nconst byRequest = staticData.calls[requestKey];\nconst byContact = staticData.calls[contactWindowKey];\nconst existing = byRequest || byContact;\n\nif (existing) {\n  return [{ json: {\n    ...x,\n    duplicate: true,\n    duplicateKind: byRequest ? 'idempotency' : 'contact_window',\n    requestKey,\n    contactWindowKey,\n    existingCall: existing,\n  } }];\n}\n\nconst pending = {\n  status: 'pending',\n  requestId: x.requestId,\n  createdAt: new Date(now).toISOString(),\n  expiresAt: new Date(now + DEDUPE_TTL_MS).toISOString(),\n};\nstaticData.calls[requestKey] = pending;\nstaticData.calls[contactWindowKey] = pending;\n\nreturn [{ json: { ...x, duplicate: false, requestKey, contactWindowKey } }];\n"
+      },
+      "id": "dedupe",
+      "name": "Dedup Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.duplicate}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-duplicate",
+      "name": "Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {accepted:true, duplicate:true, duplicateKind:$json.duplicateKind, requestId:$json.requestId, call:$json.existingCall} }}"
+      },
+      "id": "deduped",
+      "name": "Deduped Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: decide whether a human must approve before CALL-E dispatch\nconst x = $json;\nconst ctx = x.context ?? {};\nconst skip = Boolean(ctx.autoApprove || ctx.skipApproval);\nconst resumeUrl = typeof $execution !== 'undefined' ? ($execution.resumeFormUrl || $execution.resumeUrl) : undefined;\nreturn [{ json: {\n  ...x,\n  approval: {\n    required: !skip,\n    decision: skip ? 'not_required' : 'pending',\n    reason: skip ? 'AUTO_APPROVE' : 'HUMAN_APPROVAL_REQUIRED',\n    resumeUrl,\n    summary: `Call ${x.contact?.name ?? 'unknown'} at ${x.contact?.phone ?? ''} for ${x.intent}.`,\n  },\n} }];\n"
+      },
+      "id": "prepare-approval",
+      "name": "Prepare Human Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.approval.required}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-approval",
+      "name": "Approval Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {accepted:false, status:\"pending_approval\", requestId:$json.requestId, approvalUrl:$json.approval.resumeUrl, summary:$json.approval.summary} }}"
+      },
+      "id": "pending",
+      "name": "Pending Approval Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Approve Call Aunty outbound call",
+        "formDescription": "={{ 'Review this CALL-E action for ' + $('Prepare Human Approval').item.json.contact.name + ' (' + $('Prepare Human Approval').item.json.intent + '). Approving places a real phone call. Rejecting or waiting 24 hours will not place a call.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "approve"
+                  },
+                  {
+                    "option": "reject"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Approver",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Notes",
+              "fieldType": "textarea",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {
+          "limitWaitTime": true,
+          "limitType": "afterTimeInterval",
+          "resumeAmount": 24,
+          "resumeUnit": "hours"
+        }
+      },
+      "id": "wait-approval",
+      "name": "Wait for Human Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2220,
+        -220
+      ],
+      "webhookId": "call-aunty-approval-wait"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: interpret Wait-form / webhook resume payload\nconst prior = $('Prepare Human Approval').first().json;\nconst incoming = $json;\nconst raw = String(incoming.Decision ?? incoming.decision ?? incoming.approval?.decision ?? '').toLowerCase().trim();\nlet decision = 'rejected';\nif (raw === 'approve' || raw === 'approved') decision = 'approved';\nelse if (!raw) decision = 'timed_out';\n\nif (decision !== 'approved') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.calls = staticData.calls || {};\n  if (prior.requestKey) delete staticData.calls[prior.requestKey];\n  if (prior.contactWindowKey) delete staticData.calls[prior.contactWindowKey];\n}\n\nreturn [{ json: {\n  ...prior,\n  approval: {\n    ...prior.approval,\n    decision,\n    reason: decision === 'approved' ? 'OPERATOR_APPROVED' : decision === 'timed_out' ? 'APPROVAL_TIMED_OUT' : 'OPERATOR_REJECTED',\n    approvedBy: incoming.Approver ?? incoming.approver,\n    notes: incoming.Notes ?? incoming.notes,\n  },\n} }];\n"
+      },
+      "id": "evaluate-approval",
+      "name": "Evaluate Approval Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.approval.decision}}",
+              "operation": "equals",
+              "value2": "approved"
+            }
+          ]
+        }
+      },
+      "id": "if-approved",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x = $json;\nreturn [{ json: { ...x, status: x.approval?.decision === 'timed_out' ? 'approval_timed_out' : 'rejected', executed: false } }];\n"
+      },
+      "id": "rejected",
+      "name": "Rejected Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CALLE_BASE_URL + '/v1/calls'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.CALLE_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.callePayload)}}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "calle",
+      "name": "CALL-E Create Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        80
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: persist successful CALL-E ids for later dedupe hits\nconst payload = $('Prepare Human Approval').first().json;\nconst call = $json;\nconst staticData = $getWorkflowStaticData('global');\nstaticData.calls = staticData.calls || {};\nconst rec = {\n  status: 'completed',\n  requestId: payload.requestId,\n  callId: call.callId ?? call.id,\n  createdAt: new Date().toISOString(),\n  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),\n};\nif (payload.requestKey) staticData.calls[payload.requestKey] = rec;\nif (payload.contactWindowKey) staticData.calls[payload.contactWindowKey] = rec;\nreturn [{ json: { ...payload, call, duplicate: false } }];\n"
+      },
+      "id": "record-dedupe",
+      "name": "Record Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{!$json.approval.required}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-webhook-open",
+      "name": "Webhook Still Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {accepted:true, requestId:$json.requestId, call:$json.call} }}"
+      },
+      "id": "ok",
+      "name": "Accepted Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2680,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x = $json;\nreturn [{ json: { ...x, status: 'completed', executed: true } }];\n"
+      },
+      "id": "complete",
+      "name": "Mark Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2680,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: after HTTP retries are exhausted, classify and release pending locks\nconst prior = $('Prepare Human Approval').first().json;\nconst err = $json;\nconst staticData = $getWorkflowStaticData('global');\nstaticData.calls = staticData.calls || {};\nif (prior.requestKey) delete staticData.calls[prior.requestKey];\nif (prior.contactWindowKey) delete staticData.calls[prior.contactWindowKey];\n\nconst message = String(err.error?.message ?? err.message ?? JSON.stringify(err));\nconst status = Number(err.error?.httpCode ?? err.error?.statusCode ?? err.status ?? 0);\nconst retryable = status === 429 || status >= 500 || /429|timeout|temporar|network|fetch|econn|5\\d\\d/i.test(message);\n\nreturn [{ json: {\n  ...prior,\n  retryExhausted: true,\n  retryable,\n  callError: { message, status },\n} }];\n"
+      },
+      "id": "classify",
+      "name": "Classify Call Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{!$json.approval.required}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-failed-open",
+      "name": "Failed Webhook Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {accepted:false, retryExhausted:true, requestId:$json.requestId, error:$json.callError} }}"
+      },
+      "id": "failed",
+      "name": "Failed Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2680,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x = $json;\nreturn [{ json: { ...x, status: 'failed', executed: false } }];\n"
+      },
+      "id": "mark-failed",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2680,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Call Aunty Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Policy Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Gate": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Build CALL-E Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blocked Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CALL-E Payload": {
+      "main": [
+        [
+          {
+            "node": "Dedup Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Check": {
+      "main": [
+        [
+          {
+            "node": "Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Deduped Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Approval Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Required?": {
+      "main": [
+        [
+          {
+            "node": "Pending Approval Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CALL-E Create Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pending Approval Response": {
+      "main": [
+        [
+          {
+            "node": "Wait for Human Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Human Approval": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Approval Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Approval Decision": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "CALL-E Create Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CALL-E Create Call": {
+      "main": [
+        [
+          {
+            "node": "Record Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify Call Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Dedup": {
+      "main": [
+        [
+          {
+            "node": "Webhook Still Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Still Open?": {
+      "main": [
+        [
+          {
+            "node": "Accepted Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Call Error": {
+      "main": [
+        [
+          {
+            "node": "Failed Webhook Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed Webhook Open?": {
+      "main": [
+        [
+          {
+            "node": "Failed Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "call-aunty-ai-agent-v1.1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

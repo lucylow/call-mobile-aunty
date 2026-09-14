@@ -1,0 +1,16 @@
+{
+  "name": "call-e-integrations-error-fallback",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CALL-E error-handling fallback engine, duplicate-call chaos tests, and n8n import workflow",
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

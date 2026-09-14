@@ -1,0 +1,509 @@
+{
+  "name": "CALL-E Error Fallback — Resume Existing Run",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## CALL-E duplicate-run invariant\n\nIf a CALL-E run **may already exist**, resume and poll that run. Do **not** call Create / `run_call` again.\n\nThis workflow:\n1. Blocks DNC and missing consent\n2. Reuses `runId` / `callId` when present\n3. Creates **at most once** with an Idempotency-Key\n4. Treats create timeouts as in-flight (poll, never redial)\n5. Loops GET until a terminal status\n\nPhones must be synthetic `+1-202-555-xxxx` in tests. Keep the workflow **inactive** until credentials are reviewed.\n\nCALL-E recommends waiting ~60s before the first status poll; the Wait node is 8s for sandbox import testing.",
+        "height": 460,
+        "width": 380,
+        "color": 5
+      },
+      "id": "note-safety",
+      "name": "Import notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-420, -80]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calle-error-fallback",
+        "responseMode": "lastNode"
+      },
+      "id": "trigger",
+      "name": "Fallback Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "calle-error-fallback"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item=$json.body??$json; const contact=item.contact??{}; const phone=String(contact.phone??item.phone??''); return [{json:{requestId:String(item.requestId??item.idempotencyKey??$execution.id),source:String(item.source??'n8n'),intent:String(item.intent??'unknown'),contact:{name:String(contact.name??item.name??''),phone,externalId:contact.externalId},consent:String(item.consent??'unknown'),doNotContact:Boolean(item.doNotContact||item.onDnc),runId:item.runId??item.run_id??null,callId:item.callId??item.call_id??null,errorCode:item.errorCode??item.code??'',attempt:Number(item.attempt??0),maxAttempts:Number(item.maxAttempts??3),hasExistingRun:Boolean(item.runId||item.run_id||item.callId||item.call_id||item.hasExistingRun),survey:item.survey,context:item.context??{}}}];"
+      },
+      "id": "normalize",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json; const issues=[]; if(!x.contact?.phone)issues.push('MISSING_PHONE'); if(x.doNotContact)issues.push('CONTACT_IS_DNC'); if(x.consent!=='granted')issues.push('CALL_CONSENT_NOT_GRANTED'); return [{json:{...x,allowed:issues.length===0,policyIssues:issues}}];"
+      },
+      "id": "policy",
+      "name": "Policy Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.allowed}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-allowed",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [720, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {blocked:true, reason:$json.policyIssues, requestId:$json.requestId, action:'BLOCK'} }}"
+      },
+      "id": "blocked",
+      "name": "Blocked Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [960, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "function decideFallback(ctx){if(ctx.onDnc)return{allowed:false,action:'BLOCK',reason:'DNC policy'};if(!ctx.hasConsent)return{allowed:false,action:'BLOCK',reason:'missing consent'};if(ctx.code==='DUPLICATE_RUN'||ctx.hasExistingRun)return{allowed:true,action:'RESUME',reason:'resume existing run'};if(['NETWORK_TIMEOUT','PROVIDER_5XX','RATE_LIMITED','N8N_EXECUTION_TIMEOUT'].includes(ctx.code)&&ctx.attempt<ctx.maxAttempts)return{allowed:true,action:'RETRY',reason:'transient failure'};if(['NO_ANSWER','VOICEMAIL','CALL_BUSY'].includes(ctx.code))return{allowed:true,action:'ESCALATE',reason:'contact outcome requires policy-driven follow-up'};if(['SURVEY_PARSE_AMBIGUOUS','SURVEY_ABORTED'].includes(ctx.code))return{allowed:true,action:'ESCALATE',reason:'survey cannot be safely inferred'};if(['INVALID_PHONE','WEBHOOK_SIGNATURE','AUTH_INVALID','DNC_BLOCKED','CONSENT_MISSING'].includes(ctx.code))return{allowed:false,action:'BLOCK',reason:'safety or configuration failure'};return{allowed:false,action:'ESCALATE',reason:'unknown failure'};}\nfunction shouldCreateNewCall(ctx){const d=decideFallback(ctx);return d.allowed&&d.action==='RETRY'&&!ctx.hasExistingRun;}\nconst x=$json;\nconst ctx={code:String(x.errorCode??x.code??''),hasExistingRun:Boolean(x.runId||x.callId||x.hasExistingRun),hasConsent:x.consent==='granted',onDnc:Boolean(x.doNotContact),attempt:Number(x.attempt??0),maxAttempts:Number(x.maxAttempts??3)};\nconst decision=decideFallback(ctx);\nlet route='escalate';\nif(!ctx.hasConsent||ctx.onDnc||decision.action==='BLOCK')route='block';\nelse if(ctx.hasExistingRun||ctx.code==='DUPLICATE_RUN')route='resume';\nelse if(!ctx.code||shouldCreateNewCall(ctx))route='create';\nconst callePayload={to:x.contact.phone,contactName:x.contact.name,intent:x.intent,survey:x.survey,metadata:{requestId:x.requestId,source:x.source,resumeExisting:route==='resume'}};\nreturn [{json:{...x,...ctx,decision,route,createNewCall:route==='create',idempotencyKey:x.idempotencyKey??('call-e:'+x.requestId),callePayload,pollExisting:ctx.hasExistingRun||ctx.code==='N8N_EXECUTION_TIMEOUT'||ctx.code==='NETWORK_TIMEOUT'||ctx.code==='DUPLICATE_RUN'}}];"
+      },
+      "id": "decide",
+      "name": "Decide Recovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, -40]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.route}}",
+              "operation": "equals",
+              "value2": "resume"
+            }
+          ]
+        }
+      },
+      "id": "if-resume",
+      "name": "Resume Existing Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1200, -40]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json; const id=String(x.callId??x.runId??''); if(!id) return [{json:{...x,route:'escalate',reason:'resume requested but no runId/callId was persisted'}}]; return [{json:{...x,callId:id,runId:x.runId??id,hasExistingRun:true,createNewCall:false}}];"
+      },
+      "id": "use-existing",
+      "name": "Use Existing Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, -160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.route}}",
+              "operation": "equals",
+              "value2": "create"
+            }
+          ]
+        }
+      },
+      "id": "if-create",
+      "name": "Create New Call?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1440, 40]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CALLE_BASE_URL + '/v1/calls'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.CALLE_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotencyKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.callePayload)}}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "create-call",
+      "name": "CALL-E Create Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 40],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev=$('Decide Recovery').item.json; const raw=$json; const failed=Boolean(raw.error)||Boolean(raw.message&&!raw.id&&!raw.call_id&&!raw.run_id); const callId=raw.id??raw.call_id??raw.callId??prev.callId??null; const runId=raw.run_id??raw.runId??prev.runId??callId; return [{json:{...prev,createResponse:raw,createFailed:failed,callId,runId,hasExistingRun:true,createNewCall:false,errorCode:failed?(raw.code??prev.errorCode??'NETWORK_TIMEOUT'):prev.errorCode,route:'resume'}}];"
+      },
+      "id": "capture-create",
+      "name": "Capture Run And Never Redial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 40]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {accepted:false, action:$json.decision?.action??'ESCALATE', reason:$json.decision?.reason??'recovery required human review', requestId:$json.requestId, createNewCall:false} }}"
+      },
+      "id": "escalate",
+      "name": "Escalate Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1680, 220]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 8,
+        "unit": "seconds"
+      },
+      "id": "wait-first",
+      "name": "Wait Before First Poll",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2160, -80]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.CALLE_BASE_URL + '/v1/calls/' + encodeURIComponent($json.callId || $json.runId)}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.CALLE_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "get-run",
+      "name": "CALL-E Get Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, -80],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev=$json; const status=String(prev.status??prev.state??prev.createResponse?.status??'unknown').toLowerCase(); const terminal=['succeeded','completed','failed','cancelled','canceled'].includes(status); return [{json:{...prev,status,terminal,createNewCall:false,polledRunId:prev.runId??prev.callId??prev.id}}];"
+      },
+      "id": "normalize-status",
+      "name": "Normalize Run Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, -80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.terminal}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "if-terminal",
+      "name": "Terminal Status?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2880, -80]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 8,
+        "unit": "seconds"
+      },
+      "id": "wait-poll",
+      "name": "Poll Interval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3120, 40]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {accepted:true, action:'RESUME', createNewCall:false, requestId:$json.requestId, callId:$json.callId, runId:$json.runId, status:$json.status} }}"
+      },
+      "id": "completed",
+      "name": "Completed Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3120, -180]
+    }
+  ],
+  "connections": {
+    "Fallback Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Policy Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Gate": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Decide Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blocked Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Recovery": {
+      "main": [
+        [
+          {
+            "node": "Resume Existing Run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume Existing Run?": {
+      "main": [
+        [
+          {
+            "node": "Use Existing Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create New Call?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Existing Run": {
+      "main": [
+        [
+          {
+            "node": "Wait Before First Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Call?": {
+      "main": [
+        [
+          {
+            "node": "CALL-E Create Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CALL-E Create Call": {
+      "main": [
+        [
+          {
+            "node": "Capture Run And Never Redial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Run And Never Redial": {
+      "main": [
+        [
+          {
+            "node": "Wait Before First Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before First Poll": {
+      "main": [
+        [
+          {
+            "node": "CALL-E Get Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CALL-E Get Run": {
+      "main": [
+        [
+          {
+            "node": "Normalize Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Run Status": {
+      "main": [
+        [
+          {
+            "node": "Terminal Status?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Terminal Status?": {
+      "main": [
+        [
+          {
+            "node": "Completed Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Poll Interval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Interval": {
+      "main": [
+        [
+          {
+            "node": "CALL-E Get Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Fallback Webhook": [
+      {
+        "json": {
+          "requestId": "req-dup-001",
+          "source": "n8n",
+          "intent": "survey",
+          "consent": "granted",
+          "doNotContact": false,
+          "runId": "mock-run-00070",
+          "errorCode": "DUPLICATE_RUN",
+          "contact": {
+            "name": "Aunty Example",
+            "phone": "+12025550101"
+          }
+        }
+      }
+    ]
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "calle-error-fallback-resume-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    {
+      "name": "CALL-E"
+    },
+    {
+      "name": "error-fallback"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "n8n-calle-ai-agent-automation",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/agent.test.ts",
+    "build": "tsc",
+    "workflow": "node scripts/generate-workflow.mjs",
+    "validate": "node scripts/generate-workflow.mjs && tsx tests/agent.test.ts && tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
