@@ -1,5 +1,4 @@
-import { CalleClient as SdkCalleClient } from "@call-e/calle";
-
+import type { CalleClient } from "@call-e/calle";
 import { calleConfig, requireCalleApiKey } from "./config";
 import { CalleAuthError, CalleTimeoutError, CalleValidationError } from "./errors";
 import { calleHttp, unwrapCalleCall, unwrapCalleEventPage } from "./http";
@@ -24,15 +23,19 @@ function fallbackEnabled() {
 }
 
 export class CalleGateway {
-  private sdk?: SdkCalleClient;
+  private sdk?: CalleClient;
 
-  constructor(private readonly transport: CalleTransport = defaultTransport()) {
-    if (transport === "sdk") {
+  constructor(private readonly transport: CalleTransport = defaultTransport()) {}
+
+  private async getSdk(): Promise<CalleClient> {
+    if (!this.sdk) {
+      const { CalleClient: SdkCalleClient } = await import("@call-e/calle");
       this.sdk = new SdkCalleClient({
         apiKey: requireCalleApiKey(),
         baseUrl: calleConfig.baseUrl,
-      } as { apiKey: string; baseUrl?: string });
+      });
     }
+    return this.sdk;
   }
 
   async createCall(request: CreateCallRequest): Promise<CallTask> {
@@ -48,7 +51,7 @@ export class CalleGateway {
     if (this.transport === "mock") return mockCall(request);
     try {
       if (this.transport === "sdk") {
-        const created = await this.sdk!.calls.create(
+        const created = await (await this.getSdk()).calls.create(
           {
             task: request.task,
             recipients: request.recipients,
@@ -87,7 +90,7 @@ export class CalleGateway {
     if (this.transport === "mock" || isMockCallId(id)) return getMockCall(id);
     try {
       if (this.transport === "sdk") {
-        return unwrapCalleCall(await this.sdk!.calls.get(id));
+        return unwrapCalleCall(await (await this.getSdk()).calls.get(id));
       }
       return await calleHttp<CallTask>({
         method: "GET",
