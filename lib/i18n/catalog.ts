@@ -16,21 +16,39 @@ export const LOCALE_PACKS: Record<AppLanguage, TranslationTree> = {
   te,
 };
 
-export function flattenKeys(tree: TranslationTree, prefix = ""): string[] {
-  const keys: string[] = [];
+function flattenTree(tree: TranslationTree, prefix = "", out: Record<string, string> = {}): Record<string, string> {
   for (const [key, value] of Object.entries(tree)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    if (typeof value === "string") {
-      keys.push(path);
-    } else {
-      keys.push(...flattenKeys(value, path));
-    }
+    if (typeof value === "string") out[path] = value;
+    else flattenTree(value, path, out);
   }
-  return keys;
+  return out;
 }
 
+/** Flat dotted-key maps built once at module load so `t()` is O(1). */
+export const FLAT_LOCALE_PACKS: Record<AppLanguage, Readonly<Record<string, string>>> = {
+  bn: flattenTree(bn),
+  en: flattenTree(en),
+  hi: flattenTree(hi),
+  ur: flattenTree(ur),
+  ta: flattenTree(ta),
+  te: flattenTree(te),
+};
+
+export function flattenKeys(tree: TranslationTree, prefix = "", out: string[] = []): string[] {
+  for (const [key, value] of Object.entries(tree)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "string") out.push(path);
+    else flattenKeys(value, path, out);
+  }
+  return out;
+}
+
+let canonicalEnglishKeys: string[] | undefined;
+
 export function getCanonicalEnglishKeys(): string[] {
-  return flattenKeys(en).sort();
+  canonicalEnglishKeys ??= Object.keys(FLAT_LOCALE_PACKS.en).sort();
+  return canonicalEnglishKeys;
 }
 
 export function resolveTreeValue(tree: TranslationTree, keyPath: string): string | undefined {
@@ -41,4 +59,8 @@ export function resolveTreeValue(tree: TranslationTree, keyPath: string): string
     node = node[part];
   }
   return typeof node === "string" ? node : undefined;
+}
+
+export function resolveFlatValue(language: AppLanguage, keyPath: string): string | undefined {
+  return FLAT_LOCALE_PACKS[language]?.[keyPath];
 }

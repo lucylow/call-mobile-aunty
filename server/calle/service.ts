@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { createCalleAdapter, type CalleAdapter } from "./adapter";
-import { assertJobTransition } from "./call-job";
+import { createCalleAdapter, type CalleAdapter, type ProviderCallResult } from "./adapter";
+import { assertJobTransition, isTerminalWorkflowStatus } from "./call-job";
 import { loadCalleConfig, toPolicyEnv, type CalleConfig } from "./config";
 import { getCapabilitySnapshot } from "./capabilities";
 import { listDemoBeneficiaries, getDemoBeneficiary } from "./demo-data";
@@ -94,6 +94,7 @@ function toPublic(workflow: CallWorkflow) {
     policyExplanation: workflow.policyExplanation,
     prepareToken: workflow.prepareToken,
     providerCallId: workflow.providerCallId,
+    phoneProviderId: workflow.phoneProviderId ?? null,
     status: workflow.status,
     dryRun: workflow.dryRun,
     structuredResult: workflow.structuredResult,
@@ -132,6 +133,7 @@ export function createCalleService(opts?: {
   env?: Partial<CalleServiceEnv>;
   config?: CalleConfig;
   adapter?: CalleAdapter;
+  fallbackAdapters?: CalleAdapter[];
   store?: Map<string, CallWorkflow>;
   idempotency?: Map<string, string>;
 }) {
@@ -143,6 +145,7 @@ export function createCalleService(opts?: {
     createCalleAdapter({
       apiKey: env.apiKey,
       liveCallsEnabled: env.liveCallsEnabled && !env.killSwitch,
+      fallbackAdapters: opts?.fallbackAdapters,
     });
 
   const store = opts?.store ?? globalStore;
@@ -188,6 +191,7 @@ export function createCalleService(opts?: {
       idempotencyKey,
       prepareToken: randomUUID().replace(/-/g, ""),
       providerCallId: null,
+      phoneProviderId: null,
       status: "prepared",
       dryRun: policy.dryRun || policy.decision !== "allow",
       structuredResult: null,
@@ -261,6 +265,138 @@ export function createCalleService(opts?: {
     };
   }
 
+  function confirmResponse(workflow: CallWorkflow) {
+    const followUp: FollowUpMapping | null = workflow.structuredResult
+      ? mapStructuredResultToFollowUp(workflow.structuredResult)
+      : null;
+    const outcome = isTerminalWorkflowStatus(workflow.status)
+      ? orchestrator.buildOutcome(workflow)
+      : null;
+    return { ok: true as const, workflow: toPublic(workflow), followUp, outcome };
+  }
+
+  function applyProviderUpdate(
+    workflow: CallWorkflow,
+    provider: ProviderCallResult,
+    initiatorUserId: number,
+    opts: { source: "adapter" | "status" },
+  ) {
+    const priorStatus = workflow.status;
+    workflow.providerCallId = provider.providerCallId || workflow.providerCallId;
+    workflow.phoneProviderId = provider.phoneProviderId ?? workflow.phoneProviderId ?? null;
+    if (workflow.providerCallId) {
+      attachProviderCallId(workflow.id, workflow.providerCallId);
+    }
+
+    const correlation = getCorrelationBundle(workflow.id);
+    if (correlation) {
+      const attempts = provider.failoverAttempts ?? [];
+      if (attempts.length > 1) {
+        const winner = attempts.find((attempt) => attempt.accepted) ?? attempts[attempts.length - 1];
+        recordCallEvent({
+          eventId: `evt_${workflow.id}_failover`.slice(0, 64),
+          eventType: "provider_failover",
+          correlationId: correlation.correlationId,
+          workflowId: workflow.id,
+          at: nowIso(),
+          actor: "provider",
+          summary: `Phone API failover to ${winner.providerId} after ${attempts.length} attempts`,
+          code: winner.failureCode ?? undefined,
+          meta: {
+            from: attempts[0]?.providerId ?? "call-e",
+            to: winner.providerId,
+            attempts: attempts.length,
+          },
+        });
+      }
+      recordCallEvent({
+        eventId: `evt_${workflow.id}_${opts.source}_${randomUUID().replace(/-/g, "").slice(0, 8)}`.slice(
+          0,
+          64,
+        ),
+        eventType: opts.source === "adapter" ? "provider_requested" : "provider_status",
+        correlationId: correlation.correlationId,
+        workflowId: workflow.id,
+        at: nowIso(),
+        actor: "provider",
+        summary: `Provider ${provider.phoneProviderId ?? "call-e"} status ${provider.status}`,
+        code: provider.failureCode ?? undefined,
+      });
+    }
+
+    if (provider.status !== workflow.status) {
+      setWorkflowStatus(workflow, provider.status);
+      orchestrator.emit({
+        workflow,
+        fromStatus: priorStatus,
+        toStatus: provider.status,
+        actor: "provider",
+        source: opts.source === "status" ? "status" : "adapter",
+        code: provider.failureCode ?? undefined,
+      });
+    }
+
+    if (provider.structuredResult) {
+      workflow.structuredResult = provider.structuredResult;
+    }
+    workflow.failureCode = provider.failureCode;
+    workflow.updatedAt = nowIso();
+
+    const settledNow =
+      isTerminalWorkflowStatus(workflow.status) && !isTerminalWorkflowStatus(priorStatus);
+    if (settledNow) {
+      workflow.completedAt = workflow.updatedAt;
+      billingService.finalizeCallBilling({
+        userId: initiatorUserId,
+        workflowId: workflow.id,
+        status: workflow.status,
+        dryRun: workflow.dryRun,
+      });
+      const outcome = orchestrator.buildOutcome(workflow);
+      if (correlation) {
+        recordCallEvent({
+          eventId: `evt_${workflow.id}_outcome`,
+          eventType:
+            outcome.confidenceGate === "review_required" ? "review_required" : "outcome_extracted",
+          correlationId: correlation.correlationId,
+          workflowId: workflow.id,
+          at: nowIso(),
+          actor: "ai",
+          summary: `Disposition ${outcome.extracted.disposition}; gate ${outcome.confidenceGate}`,
+          meta: { confidence: outcome.extracted.confidence },
+        });
+        recordCallEvent({
+          eventId: `evt_${workflow.id}_done`,
+          eventType: workflow.status === "failed" ? "failed" : "completed",
+          correlationId: correlation.correlationId,
+          workflowId: workflow.id,
+          at: nowIso(),
+          actor: "system",
+          summary: normalizeCallStatus(workflow.status).label,
+        });
+      }
+      if (provider.structuredResult?.safetyEscalation === "urgent_in_person_care") {
+        advanceConversation(workflow.id, "escalate");
+      } else if (workflow.status === "no_answer") {
+        advanceConversation(workflow.id, "voicemail_detected");
+      } else if (workflow.status !== "cancelled" && workflow.status !== "failed") {
+        advanceConversation(workflow.id, "identity_verified");
+        advanceConversation(workflow.id, "purpose_acknowledged");
+        advanceConversation(workflow.id, "close_requested");
+        advanceConversation(workflow.id, "close_requested");
+      }
+    }
+
+    store.set(workflow.id, workflow);
+  }
+
+  async function refreshFromProvider(workflow: CallWorkflow, initiatorUserId: number) {
+    if (!workflow.providerCallId) return;
+    if (isTerminalWorkflowStatus(workflow.status)) return;
+    const provider = await adapter.getStatus(workflow.providerCallId);
+    applyProviderUpdate(workflow, provider, initiatorUserId, { source: "status" });
+  }
+
   async function confirm(raw: ConfirmCallInput, initiatorUserId: number) {
     const input = confirmCallInputSchema.parse(raw);
     const workflow = store.get(input.workflowId);
@@ -277,26 +413,21 @@ export function createCalleService(opts?: {
         workflow: toPublic(workflow),
       };
     }
+    if (isTerminalWorkflowStatus(workflow.status)) {
+      return confirmResponse(workflow);
+    }
+
+    // Persist run_id and resume get_call_run — never place the call twice.
+    if (workflow.providerCallId) {
+      await refreshFromProvider(workflow, initiatorUserId);
+      return confirmResponse(workflow);
+    }
+
     if (workflow.status === "starting" || workflow.status === "in_progress") {
       return {
         ok: false as const,
         code: "duplicate_in_flight" as CallFailureCode,
         workflow: toPublic(workflow),
-      };
-    }
-    if (
-      workflow.status === "completed" ||
-      workflow.status === "dry_run_completed" ||
-      workflow.status === "no_answer" ||
-      workflow.status === "failed" ||
-      workflow.status === "cancelled"
-    ) {
-      return {
-        ok: true as const,
-        workflow: toPublic(workflow),
-        followUp: workflow.structuredResult
-          ? mapStructuredResultToFollowUp(workflow.structuredResult)
-          : null,
       };
     }
 
@@ -339,89 +470,14 @@ export function createCalleService(opts?: {
       dryRun: workflow.dryRun,
     });
 
-    workflow.providerCallId = provider.providerCallId;
-    if (provider.providerCallId) {
-      attachProviderCallId(workflow.id, provider.providerCallId);
-    }
-    const correlation = getCorrelationBundle(workflow.id);
-    if (correlation) {
-      recordCallEvent({
-        eventId: `evt_${workflow.id}_provider`,
-        eventType: "provider_requested",
-        correlationId: correlation.correlationId,
-        workflowId: workflow.id,
-        at: nowIso(),
-        actor: "provider",
-        summary: `Provider status ${provider.status}`,
-        code: provider.failureCode ?? undefined,
-      });
-    }
-
-    setWorkflowStatus(workflow, provider.status);
-    workflow.structuredResult = provider.structuredResult;
-    workflow.failureCode = provider.failureCode;
-    workflow.completedAt = nowIso();
-    workflow.updatedAt = workflow.completedAt;
-    store.set(workflow.id, workflow);
-    orchestrator.emit({
-      workflow,
-      fromStatus: "starting",
-      toStatus: provider.status,
-      actor: "provider",
-      source: "adapter",
-      code: provider.failureCode ?? undefined,
-    });
-
-    const followUp: FollowUpMapping | null = provider.structuredResult
-      ? mapStructuredResultToFollowUp(provider.structuredResult)
-      : null;
-    billingService.finalizeCallBilling({
-      userId: initiatorUserId,
-      workflowId: workflow.id,
-      status: provider.status,
-      dryRun: workflow.dryRun,
-    });
-    const outcome = orchestrator.buildOutcome(workflow);
-    if (correlation) {
-      recordCallEvent({
-        eventId: `evt_${workflow.id}_outcome`,
-        eventType:
-          outcome.confidenceGate === "review_required" ? "review_required" : "outcome_extracted",
-        correlationId: correlation.correlationId,
-        workflowId: workflow.id,
-        at: nowIso(),
-        actor: "ai",
-        summary: `Disposition ${outcome.extracted.disposition}; gate ${outcome.confidenceGate}`,
-        meta: { confidence: outcome.extracted.confidence },
-      });
-      recordCallEvent({
-        eventId: `evt_${workflow.id}_done`,
-        eventType: provider.status === "failed" ? "failed" : "completed",
-        correlationId: correlation.correlationId,
-        workflowId: workflow.id,
-        at: nowIso(),
-        actor: "system",
-        summary: normalizeCallStatus(workflow.status).label,
-      });
-    }
-
-    if (provider.structuredResult?.safetyEscalation === "urgent_in_person_care") {
-      advanceConversation(workflow.id, "escalate");
-    } else if (provider.status === "no_answer") {
-      advanceConversation(workflow.id, "voicemail_detected");
-    } else {
-      advanceConversation(workflow.id, "identity_verified");
-      advanceConversation(workflow.id, "purpose_acknowledged");
-      advanceConversation(workflow.id, "close_requested");
-      advanceConversation(workflow.id, "close_requested");
-    }
-
-    return { ok: true as const, workflow: toPublic(workflow), followUp, outcome };
+    applyProviderUpdate(workflow, provider, initiatorUserId, { source: "adapter" });
+    return confirmResponse(workflow);
   }
 
   async function getStatus(workflowId: string, initiatorUserId: number) {
     const workflow = store.get(workflowId);
     if (!workflow || workflow.initiatorUserId !== initiatorUserId) return null;
+    await refreshFromProvider(workflow, initiatorUserId);
     return toPublic(workflow);
   }
 
@@ -431,7 +487,14 @@ export function createCalleService(opts?: {
       return { ok: false as const, code: "unauthorized" as CallFailureCode };
     }
     if (workflow.providerCallId) {
-      await adapter.cancel(workflow.providerCallId);
+      try {
+        const cancelled = await adapter.cancel(workflow.providerCallId);
+        if (cancelled.failureCode && cancelled.failureCode !== "cancelled" && cancelled.status !== "cancelled") {
+          return { ok: false as const, code: cancelled.failureCode };
+        }
+      } catch {
+        return { ok: false as const, code: "provider_unavailable" as CallFailureCode };
+      }
     }
     setWorkflowStatus(workflow, "cancelled");
     workflow.failureCode = "cancelled";
@@ -581,6 +644,7 @@ export function createCalleService(opts?: {
   async function getCallDetail(workflowId: string, initiatorUserId: number) {
     const workflow = store.get(workflowId);
     if (!workflow || workflow.initiatorUserId !== initiatorUserId) return null;
+    await refreshFromProvider(workflow, initiatorUserId);
 
     const publicWorkflow = toPublic(workflow);
     const timeline = orchestrator.getTimeline(workflowId);
@@ -651,7 +715,10 @@ export function createCalleService(opts?: {
   };
 }
 
-export type CalleService = ReturnType<typeof createCalleService>;
+export type CalleWorkflowService = ReturnType<typeof createCalleService>;
 
 /** Shared default service for tRPC routers (dry-run unless env enables live calls). */
 export const calleService = createCalleService();
+
+/** REST/SDK gateway service used by `/api/calle`. */
+export { CalleService } from "./api-service";

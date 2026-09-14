@@ -52,18 +52,18 @@ export function VoiceAnswerControl({
   const applyIntent = useCallback(
     (intent: VoiceAnswerIntent) => {
       if (intent === "yes") {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
         onAnswer(true);
         return;
       }
       if (intent === "no") {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
         onAnswer(false);
         return;
       }
       setFeedback(unclearLabel);
       onUnclear?.();
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
     },
     [onAnswer, onUnclear, unclearLabel],
   );
@@ -79,7 +79,7 @@ export function VoiceAnswerControl({
       setFeedback(permissionLabel);
       return;
     }
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
   }, [offlineLabel, online, permissionLabel, recorder]);
 
   const finish = useCallback(async () => {
@@ -132,7 +132,7 @@ export function VoiceAnswerControl({
           pressed && styles.pressed,
         ]}
       >
-        {busy ? <ActivityIndicator color="#FFFFFF" /> : <IconSymbol name="waveform" size={26} color="#FFFFFF" />}
+        {busy ? <ActivityIndicator color="#FFFFFF" /> : <IconSymbol name="mic.fill" size={26} color="#FFFFFF" />}
       </Pressable>
       <Text style={[styles.label, { color: colors.foreground }]}>{label}</Text>
       {feedback ? (

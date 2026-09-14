@@ -116,6 +116,7 @@ export type CallWorkflow = {
   idempotencyKey: string;
   prepareToken: string;
   providerCallId: string | null;
+  phoneProviderId?: string | null;
   status: CallWorkflowStatus;
   dryRun: boolean;
   structuredResult: CallStructuredResult | null;
@@ -161,3 +162,82 @@ export const CALL_E_RESULT_JSON_SCHEMA = {
     },
   },
 } as const;
+
+export const CallStatusSchema = z.enum(["queued", "in_progress", "completed", "failed", "canceled"]);
+export type CallStatus = z.infer<typeof CallStatusSchema>;
+
+export type JsonSchema = {
+  type?: "object" | "array" | "string" | "integer" | "number" | "boolean" | string;
+  description?: string;
+  enum?: string[];
+  required?: string[];
+  additionalProperties?: boolean;
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+};
+
+export type Recipient = { phones: string[]; region?: string; locale?: string };
+
+export type CreateCallRequest = {
+  task: string;
+  recipients: Recipient[];
+  resultSchema?: JsonSchema;
+  recipientResultSchema?: JsonSchema;
+  metadata?: Record<string, string>;
+  idempotencyKey: string;
+  webhookUrl?: string;
+};
+
+export type CallTask = {
+  id: string;
+  object?: "call_task";
+  status: CallStatus;
+  task: string;
+  recipients: unknown[];
+  structured_result?: unknown;
+  summary?: string | null;
+  task_completed?: boolean;
+  completion_confidence?: { score: number; label: string } | null;
+  evidence?: string[];
+  metadata?: Record<string, string>;
+  failure_code?: string | null;
+  failure_message?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+};
+
+export type CallEvent = {
+  id: string;
+  type: string;
+  call_id: string;
+  created_at: string;
+  level?: string;
+  status?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+};
+
+export type CallEventPage = {
+  object: "list";
+  data: CallEvent[];
+  next_cursor?: string | null;
+};
+
+export const CreateCallRequestSchema = z.object({
+  task: z.string().min(1).max(20_000),
+  recipients: z
+    .array(
+      z.object({
+        phones: z.array(z.string().min(1)).min(1),
+        region: z.string().length(2).optional(),
+        locale: z.string().min(2).optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+  resultSchema: z.custom<JsonSchema>().optional(),
+  recipientResultSchema: z.custom<JsonSchema>().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  idempotencyKey: z.string().min(8).max(255),
+  webhookUrl: z.string().url().optional(),
+});

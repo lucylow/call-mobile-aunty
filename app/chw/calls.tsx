@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 
+import { BackLink } from "@/components/call-aunty/back-link";
+import { ScreenHeader } from "@/components/call-aunty/screen-header";
+import { CalleApiDemoPanel } from "@/components/calle-v4/api-demo-panel";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useLanguage } from "@/contexts/language-context";
@@ -110,18 +113,12 @@ export default function CallCommandCenterScreen() {
         contentContainerStyle={[styles.content, { direction }]}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable onPress={() => router.back()} style={styles.backRow} accessibilityRole="button">
-          <IconSymbol name="chevron.left" size={18} color={colors.coral} />
-          <Text style={{ color: colors.coral }}>{translate("common.back")}</Text>
-        </Pressable>
-
-        <Text style={[styles.eyebrow, { color: colors.coral }]}>{indicator}</Text>
-        <Text style={[styles.title, { color: colors.foreground }]}>
-          {translate("calls.commandCenter")}
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>
-          {translate("calls.commandSubtitle")}
-        </Text>
+        <BackLink label={translate("common.back")} onPress={() => router.back()} />
+        <ScreenHeader
+          eyebrow={indicator}
+          title={translate("calls.commandCenter")}
+          subtitle={translate("calls.commandSubtitle")}
+        />
 
         {usingDemoFallback ? (
           <View style={[styles.banner, { backgroundColor: tints.amberSoft, borderColor: colors.border }]}>
@@ -157,6 +154,8 @@ export default function CallCommandCenterScreen() {
             {heroMutation.isPending ? translate("calls.heroRunning") : translate("calls.heroDemo")}
           </Text>
         </Pressable>
+
+        <CalleApiDemoPanel />
 
         {localHeroId ? (
           <Text style={[styles.meta, { color: colors.success }]}>
@@ -278,10 +277,6 @@ export default function CallCommandCenterScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 40, gap: 12 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 },
-  eyebrow: { fontSize: 12, fontWeight: "700", letterSpacing: 1, marginTop: 8 },
-  title: { fontSize: 28, fontWeight: "700" },
-  subtitle: { fontSize: 15, lineHeight: 22, marginBottom: 4 },
   banner: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 8 },
   heroBtn: {
     flexDirection: "row",

@@ -7,8 +7,9 @@ import {
   getCheckInQuestionnaireCopy,
   isConcerningAnswer,
 } from "../lib/check-in-questionnaire";
-import { applyCheckInAnswer, getConcerningFindings, normalizeCheckInAnswers } from "../lib/check-in-stepper";
+import { applyCheckInAnswer, getConcerningFindings, normalizeCheckInAnswers, previousCheckInQuestion } from "../lib/check-in-stepper";
 import { classifyCheckIn } from "../lib/triage";
+import { hasVisualForEveryQuestion } from "../lib/check-in-visuals";
 import {
   createOfflineCheckInProgress,
   OFFLINE_CHECKIN_QUESTION_COUNT,
@@ -71,6 +72,17 @@ describe("check-in questionnaire", () => {
     expect(classifyCheckIn(EMPTY_CHECK_IN_ANSWERS)).toBe("routine");
   });
 
+  it("lets the woman go back one question without wiping answers", () => {
+    expect(previousCheckInQuestion(0)).toBe(0);
+    expect(previousCheckInQuestion(2)).toBe(1);
+    expect(previousCheckInQuestion(99)).toBe(2);
+    expect(previousCheckInQuestion(Number.NaN)).toBe(0);
+  });
+
+  it("keeps an illustration spec for every question", () => {
+    expect(hasVisualForEveryQuestion()).toBe(true);
+  });
+
   it("ignores invalid question indexes instead of silently rewriting question 0", () => {
     const draft = { ...EMPTY_CHECK_IN_ANSWERS, breathingDifficulty: true };
     const invalid = applyCheckInAnswer(Number.NaN, draft, true);
@@ -106,13 +118,17 @@ describe("check-in questionnaire", () => {
     });
   });
 
-  it("localizes prompts, hints, and findings across supported languages", () => {
+  it("localizes prompts, hints, findings, and image alt text across supported languages", () => {
     for (const language of ["en", "bn", "hi", "ur", "ta", "te"] as const) {
       const copy = getCheckInQuestionnaireCopy(language);
       expect(copy.questions.severeBleedingOrPain.length).toBeGreaterThan(10);
       expect(copy.hints.breathingDifficulty.length).toBeGreaterThan(10);
       expect(copy.findings.needsHelpScheduling.length).toBeGreaterThan(3);
+      expect(copy.imageAlt.reducedBabyMovement.length).toBeGreaterThan(10);
       expect(copy.findingsTitle.length).toBeGreaterThan(3);
+      expect(copy.savedOnDevice.length).toBeGreaterThan(3);
+      expect(copy.previousQuestion.length).toBeGreaterThan(3);
+      expect(copy.imageAlt.reducedBabyMovement.length).toBeGreaterThan(8);
     }
     expect(getCheckInQuestionnaireCopy("en").hints.reducedBabyMovement).not.toBe(
       getCheckInQuestionnaireCopy("bn").hints.reducedBabyMovement,

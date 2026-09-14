@@ -40,7 +40,8 @@ describe("V8 i18n foundation", () => {
 
     for (const [lang, tree] of Object.entries(LOCALE_PACKS)) {
       const keys = flattenKeys(tree);
-      const missing = canonical.filter((k) => !keys.includes(k));
+      const keySet = new Set(keys);
+      const missing = canonical.filter((k) => !keySet.has(k));
       expect(missing, `${lang} missing keys`).toEqual([]);
 
       for (const key of keys) {

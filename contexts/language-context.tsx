@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { I18nManager, Platform } from "react-native";
 import type { AppLanguage } from "@/lib/language";
 import {
@@ -43,6 +43,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     report: "en",
   });
   const [ready, setReady] = useState(false);
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
 
   useEffect(() => {
     void loadLanguagePreferences()
@@ -54,14 +56,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setUiLanguage = useCallback(async (language: AppLanguage) => {
-    const next: LanguagePreferences = { ...preferences, ui: language, ai: language, notification: language };
+    const next: LanguagePreferences = { ...preferencesRef.current, ui: language, ai: language, notification: language };
     const saved = await saveAllLanguagePreferences(next);
     if (saved) {
       setPreferences(next);
       applyNativeDirection(getEffectiveDirection(language));
     }
     return saved;
-  }, [preferences]);
+  }, []);
 
   const setCallLanguage = useCallback(async (code: string) => {
     const saved = await saveLanguagePreference("call", code);

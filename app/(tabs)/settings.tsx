@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
+import { AppearanceToggle } from "@/components/call-aunty/appearance-toggle";
 import { PasscodeModal } from "@/components/call-aunty/passcode-modal";
+import { RoleToggle } from "@/components/call-aunty/role-toggle";
+import { ScreenHeader } from "@/components/call-aunty/screen-header";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useAppRole } from "@/contexts/app-role";
 import { useLanguage } from "@/contexts/language-context";
 import { useColors } from "@/hooks/use-colors";
 import { useUiTints } from "@/hooks/use-ui-tints";
@@ -12,7 +16,8 @@ import { clearPasscode, hasPasscode, savePasscode, verifyPasscode } from "@/lib/
 import { getBiometricAvailability, loadPrivacyLock } from "@/lib/privacy-lock";
 import { getSecurityStatusSummary, getSecurityCopy } from "@/lib/security-copy";
 import { getLanguageOption, type AppLanguage } from "@/lib/language";
-import { getSettingsCopy } from "@/lib/app-copy";
+import { getSettingsCopy, getAppCopy } from "@/lib/app-copy";
+import { cardElevation, TAB_SCROLL_BOTTOM } from "@/lib/ui-elevation";
 import { getPasscodeStrength } from "@/lib/passcode-utils";
 import { getCapabilitySummary, loadNativeCapabilityState, type NativeCapabilityState } from "@/lib/native-capabilities";
 import { getLowDataCopy } from "@/lib/low-data-copy";
@@ -35,7 +40,9 @@ export default function SettingsScreen() {
   const [passcodeDraft, setPasscodeDraft] = useState("");
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const { language, direction, translate } = useLanguage();
+  const { role } = useAppRole();
   const copy = getSettingsCopy(language);
+  const appCopy = getAppCopy(language);
   const [timeoutPickerOpen, setTimeoutPickerOpen] = useState(false);
   const [capabilities, setCapabilities] = useState<NativeCapabilityState>({ biometricAvailable: false, secureStorageAvailable: false, backgroundTaskAvailable: false, backgroundTaskRegistered: false });
   const [lowDataMode, setLowDataMode] = useState<LowDataMode>(DEFAULT_LOW_DATA_MODE);
@@ -156,10 +163,14 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer className="px-5" containerClassName="bg-background">
       <ScrollView contentContainerStyle={[styles.content, { direction }]} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.eyebrow, { color: colors.coral }]}>{copy.eyebrow}</Text>
-        <Text style={[styles.title, { color: colors.foreground }]}>{getSecurityCopy(language).settingsTitle}</Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>{copy.subtitle}</Text>
-        <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={styles.avatarText}>A</Text></View><View style={{ flex: 1 }}><Text style={[styles.profileName, { color: colors.foreground }]}>Aisha Rahman</Text><Text style={[styles.profileMeta, { color: colors.muted }]}>{copy.profileMeta}</Text></View><IconSymbol name="chevron.right" size={18} color={colors.muted} /></View>
+        <ScreenHeader eyebrow={copy.eyebrow} title={getSecurityCopy(language).settingsTitle} subtitle={copy.subtitle} />
+        <View style={[styles.profileCard, cardElevation, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={styles.avatarText}>{role === "chw" ? "S" : "A"}</Text></View><View style={{ flex: 1 }}><Text style={[styles.profileName, { color: colors.foreground }]}>{role === "chw" ? copy.profileNameChw : copy.profileNameWoman}</Text><Text style={[styles.profileMeta, { color: colors.muted }]}>{role === "chw" ? copy.profileMetaChw : copy.profileMeta}</Text></View></View>
+        <Text style={[styles.section, { color: colors.foreground }]}>{translate("settings.appearance")}</Text>
+        <Text style={[styles.sectionHint, { color: colors.muted }]}>{translate("settings.appearanceDetail")}</Text>
+        <AppearanceToggle lightLabel={translate("settings.light")} darkLabel={translate("settings.dark")} />
+        <Text style={[styles.section, { color: colors.foreground }]}>{translate("settings.role")}</Text>
+        <Text style={[styles.sectionHint, { color: colors.muted }]}>{translate("settings.roleDetail")}</Text>
+        <RoleToggle womanLabel={appCopy.womanView} chwLabel={appCopy.chwView} />
         <Text style={[styles.section, { color: colors.foreground }]}>{copy.reachSection}</Text>
         <Pressable
           accessibilityRole="button"
@@ -175,6 +186,23 @@ export default function SettingsScreen() {
             </Text>
             <Text style={[styles.rowDetail, { color: colors.muted }]}>
               {translate("settings.plansDetail")}
+            </Text>
+          </View>
+          <IconSymbol name="chevron.right" size={18} color={colors.muted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={translate("settings.phoneAgent")}
+          onPress={() => router.push("/calle-agent" as Href)}
+          style={({ pressed }) => [styles.planLink, { borderColor: colors.border, backgroundColor: colors.surface }, pressed && styles.pressed]}
+        >
+          <View style={[styles.rowIcon, { backgroundColor: tints.coralSoft }]}>
+            <IconSymbol name="phone.fill" size={19} color={colors.coral} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowTitle, { color: colors.foreground }]}>{translate("settings.phoneAgent")}</Text>
+            <Text style={[styles.rowDetail, { color: colors.muted }]}>
+              {translate("settings.phoneAgentDetail")}
             </Text>
           </View>
           <IconSymbol name="chevron.right" size={18} color={colors.muted} />
@@ -208,20 +236,18 @@ function SettingRow({ icon, title, detail, colors, tints, onPress, toggle, toggl
 }
 
 function TimeoutPickerModal({ visible, selected, language, colors, tints, onSelect, onCancel }: { visible: boolean; selected: AppLockTimeoutMs; language: AppLanguage; colors: ReturnType<typeof useColors>; tints: ReturnType<typeof useUiTints>; onSelect: (value: AppLockTimeoutMs) => void; onCancel: () => void }) {
-  return <Modal transparent visible={visible} animationType="slide" onRequestClose={onCancel}><View style={[styles.sheetScrim, { backgroundColor: tints.scrim }]}><View style={[styles.sheet, { backgroundColor: colors.surface }]}><Text style={[styles.sheetTitle, { color: colors.foreground }]}>{getSecurityCopy(language).timeoutTitle}</Text><Text style={[styles.rowDetail, { color: colors.muted }]}>{getSecurityCopy(language).timeoutSubtitle}</Text>{APP_LOCK_TIMEOUT_OPTIONS.map((option) => <Pressable key={option} accessibilityRole="radio" accessibilityLabel={formatAppLockTimeout(option)} accessibilityState={{ selected: selected === option }} onPress={() => onSelect(option)} style={[styles.timeoutOption, { borderColor: selected === option ? colors.primary : colors.border, backgroundColor: selected === option ? tints.lavenderSoft : colors.background }]}><Text style={[styles.rowTitle, { color: colors.foreground }]}>{formatAppLockTimeout(option)}</Text><Text style={[styles.rowDetail, { color: colors.muted }]}>{selected === option ? getSecurityCopy(language).selected : getSecurityCopy(language).tapToChoose}</Text></Pressable>)}<Pressable accessibilityRole="button" accessibilityLabel={getSecurityCopy(language).cancel} onPress={onCancel} style={styles.sheetCancel}><Text style={[styles.privacyText, { color: colors.primary }]}>{getSecurityCopy(language).cancel}</Text></Pressable></View></View></Modal>;
+  return <Modal transparent visible={visible} animationType="slide" onRequestClose={onCancel}><View style={[styles.sheetScrim, { backgroundColor: tints.scrim }]}><View style={[styles.sheet, { backgroundColor: colors.surface }]}><View style={[styles.sheetHandle, { backgroundColor: colors.border }]} /><Text style={[styles.sheetTitle, { color: colors.foreground }]}>{getSecurityCopy(language).timeoutTitle}</Text><Text style={[styles.rowDetail, { color: colors.muted }]}>{getSecurityCopy(language).timeoutSubtitle}</Text>{APP_LOCK_TIMEOUT_OPTIONS.map((option) => <Pressable key={option} accessibilityRole="radio" accessibilityLabel={formatAppLockTimeout(option)} accessibilityState={{ selected: selected === option }} onPress={() => onSelect(option)} style={[styles.timeoutOption, { borderColor: selected === option ? colors.primary : colors.border, backgroundColor: selected === option ? tints.lavenderSoft : colors.background }]}><Text style={[styles.rowTitle, { color: colors.foreground }]}>{formatAppLockTimeout(option)}</Text><Text style={[styles.rowDetail, { color: colors.muted }]}>{selected === option ? getSecurityCopy(language).selected : getSecurityCopy(language).tapToChoose}</Text></Pressable>)}<Pressable accessibilityRole="button" accessibilityLabel={getSecurityCopy(language).cancel} onPress={onCancel} style={styles.sheetCancel}><Text style={[styles.privacyText, { color: colors.primary }]}>{getSecurityCopy(language).cancel}</Text></Pressable></View></View></Modal>;
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 10, paddingBottom: 36, gap: 15 },
-  eyebrow: { fontSize: 12, fontWeight: "800", letterSpacing: 1.5, textTransform: "uppercase" },
-  title: { fontSize: 30, fontWeight: "800", letterSpacing: -0.7 },
-  subtitle: { fontSize: 15, lineHeight: 22, marginTop: -6 },
+  content: { paddingTop: 10, paddingBottom: TAB_SCROLL_BOTTOM, gap: 15 },
   profileCard: { borderRadius: 22, borderWidth: 1, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 },
   avatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   avatarText: { color: "#FFFFFF", fontSize: 17, fontWeight: "800" },
   profileName: { fontSize: 16, fontWeight: "800" },
   profileMeta: { fontSize: 12, marginTop: 4 },
   section: { fontSize: 18, fontWeight: "800", marginTop: 6, letterSpacing: -0.2 },
+  sectionHint: { fontSize: 13, lineHeight: 18, marginTop: -8 },
   planLink: {
     borderRadius: 18,
     borderWidth: 1,
@@ -248,7 +274,8 @@ const styles = StyleSheet.create({
   privacyLink: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, paddingVertical: 10 },
   privacyText: { fontSize: 14, fontWeight: "800" },
   sheetScrim: { flex: 1, justifyContent: "flex-end" },
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, gap: 12 },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 22, paddingTop: 12, paddingBottom: 22, gap: 12 },
+  sheetHandle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2 },
   sheetTitle: { fontSize: 22, fontWeight: "800", letterSpacing: -0.3 },
   timeoutOption: { borderWidth: 1, borderRadius: 16, padding: 14 },
   sheetCancel: { alignItems: "center", paddingVertical: 10 },

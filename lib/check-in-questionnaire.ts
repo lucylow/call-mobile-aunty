@@ -32,6 +32,7 @@ export type CheckInQuestionnaireCopy = {
   questions: Record<CheckInQuestionId, string>;
   hints: Record<CheckInQuestionId, string>;
   findings: Record<CheckInQuestionId, string>;
+  imageAlt: Record<CheckInQuestionId, string>;
   symptomYes: string;
   symptomNo: string;
   movementYes: string;
@@ -42,6 +43,13 @@ export type CheckInQuestionnaireCopy = {
   attentionTitle: string;
   attentionBody: string;
   contactChwToday: string;
+  savedOnDevice: string;
+  previousQuestion: string;
+  startNew: string;
+  restartTitle: string;
+  restartBody: string;
+  pauseToast: string;
+  seeCarePlan: string;
   progress: (current: number, total: number) => string;
 };
 
@@ -64,6 +72,12 @@ const english: CheckInQuestionnaireCopy = {
     reducedBabyMovement: "Less baby movement than usual",
     needsHelpScheduling: "Needs help arranging care",
   },
+  imageAlt: {
+    severeBleedingOrPain: "Illustration of a pregnant woman resting a hand on her belly, checking for pain or bleeding.",
+    breathingDifficulty: "Illustration of a pregnant woman taking a calm breath outdoors.",
+    reducedBabyMovement: "Illustration of a pregnant woman feeling the baby move.",
+    needsHelpScheduling: "Illustration of a pregnant woman walking to a community clinic for care.",
+  },
   symptomYes: "Yes, right now",
   symptomNo: "No",
   movementYes: "Yes, as usual",
@@ -75,6 +89,13 @@ const english: CheckInQuestionnaireCopy = {
   attentionBody:
     "Your answers suggest a change that should be reviewed today. Call your health worker, or ask Aunty to help you connect. This is not an emergency screen — if symptoms worsen, seek care right away.",
   contactChwToday: "Contact my health worker",
+  savedOnDevice: "Saved on this phone",
+  previousQuestion: "Previous question",
+  startNew: "Start a new check-in",
+  restartTitle: "Start a new check-in?",
+  restartBody: "Your unfinished answers are still on this phone. Resume to keep them, or start over.",
+  pauseToast: "Progress saved on this phone",
+  seeCarePlan: "See my care plan",
   progress: (current, total) => `${current} of ${total}`,
 };
 
@@ -97,6 +118,12 @@ const bangla: CheckInQuestionnaireCopy = {
     reducedBabyMovement: "স্বাভাবিকের চেয়ে কম নড়াচড়া",
     needsHelpScheduling: "যত্ন সাজাতে সাহায্য দরকার",
   },
+  imageAlt: {
+    severeBleedingOrPain: "গর্ভবতী নারী পেটে হাত রেখে ব্যথা বা রক্তপাত পরীক্ষা করছেন — চিত্রণ।",
+    breathingDifficulty: "গর্ভবতী নারী বাইরে শান্তভাবে শ্বাস নিচ্ছেন — চিত্রণ।",
+    reducedBabyMovement: "গর্ভবতী নারী শিশুর নড়াচড়া অনুভব করছেন — চিত্রণ।",
+    needsHelpScheduling: "গর্ভবতী নারী কমিউনিটি ক্লিনিকের দিকে যাচ্ছেন — চিত্রণ।",
+  },
   symptomYes: "হ্যাঁ, এখনই",
   symptomNo: "না",
   movementYes: "হ্যাঁ, স্বাভাবিকভাবে",
@@ -108,6 +135,13 @@ const bangla: CheckInQuestionnaireCopy = {
   attentionBody:
     "আপনার উত্তরগুলো এমন পরিবর্তন দেখায় যা আজ পর্যালোচনা করা উচিত। স্বাস্থ্যকর্মীকে কল করুন, অথবা সংযোগে সাহায্যের জন্য আন্টিকে বলুন। এটি জরুরি স্ক্রিন নয় — লক্ষণ খারাপ হলে এখনই যত্ন নিন।",
   contactChwToday: "আমার স্বাস্থ্যকর্মীকে যোগাযোগ করুন",
+  savedOnDevice: "এই ফোনে সংরক্ষিত",
+  previousQuestion: "আগের প্রশ্ন",
+  startNew: "নতুন চেক-ইন শুরু করুন",
+  restartTitle: "নতুন করে শুরু করবেন?",
+  restartBody: "আপনার অসম্পূর্ণ উত্তর এই ফোনে আছে। রাখতে চালিয়ে যান, অথবা নতুন করে শুরু করুন।",
+  pauseToast: "অগ্রগতি এই ফোনে সংরক্ষিত",
+  seeCarePlan: "আমার যত্নের পরিকল্পনা দেখুন",
   progress: (current, total) => `${total}টির মধ্যে ${current}`,
 };
 
@@ -130,6 +164,12 @@ const hindi: CheckInQuestionnaireCopy = {
     reducedBabyMovement: "सामान्य से कम हलचल",
     needsHelpScheduling: "देखभाल तय करने में मदद चाहिए",
   },
+  imageAlt: {
+    severeBleedingOrPain: "गर्भवती महिला पेट पर हाथ रखकर दर्द या रक्तस्राव जाँच रही हैं — चित्र।",
+    breathingDifficulty: "गर्भवती महिला बाहर शांत साँस ले रही हैं — चित्र।",
+    reducedBabyMovement: "गर्भवती महिला बच्चे की हलचल महसूस कर रही हैं — चित्र।",
+    needsHelpScheduling: "गर्भवती महिला सामुदायिक क्लिनिक की ओर जा रही हैं — चित्र।",
+  },
   symptomYes: "हाँ, अभी",
   symptomNo: "नहीं",
   movementYes: "हाँ, सामान्य रही",
@@ -141,6 +181,13 @@ const hindi: CheckInQuestionnaireCopy = {
   attentionBody:
     "आपके उत्तरों से ऐसा बदलाव दिखता है जिसकी आज समीक्षा होनी चाहिए। अपने स्वास्थ्यकर्मी को कॉल करें, या जुड़ने में मदद के लिए आंटी से कहें। यह आपात स्क्रीन नहीं है — लक्षण बिगड़ें तो तुरंत देखभाल लें।",
   contactChwToday: "मेरे स्वास्थ्यकर्मी से संपर्क करें",
+  savedOnDevice: "इस फ़ोन पर सहेजा गया",
+  previousQuestion: "पिछला प्रश्न",
+  startNew: "नया चेक-इन शुरू करें",
+  restartTitle: "नया चेक-इन शुरू करें?",
+  restartBody: "आपके अधूरे उत्तर इस फ़ोन पर हैं। रखने के लिए जारी रखें, या फिर से शुरू करें।",
+  pauseToast: "प्रगति इस फ़ोन पर सहेजी गई",
+  seeCarePlan: "मेरी देखभाल योजना देखें",
   progress: (current, total) => `${total} में से ${current}`,
 };
 
@@ -163,6 +210,12 @@ const urdu: CheckInQuestionnaireCopy = {
     reducedBabyMovement: "معمول سے کم حرکت",
     needsHelpScheduling: "دیکھ بھال ترتیب دینے میں مدد چاہیے",
   },
+  imageAlt: {
+    severeBleedingOrPain: "حاملہ خاتون پیٹ پر ہاتھ رکھ کر درد یا خون بہنے کی جانچ کر رہی ہیں — تصویر۔",
+    breathingDifficulty: "حاملہ خاتون باہر پرسکون سانس لے رہی ہیں — تصویر۔",
+    reducedBabyMovement: "حاملہ خاتون بچے کی حرکت محسوس کر رہی ہیں — تصویر۔",
+    needsHelpScheduling: "حاملہ خاتون کمیونٹی کلینک کی طرف جا رہی ہیں — تصویر۔",
+  },
   symptomYes: "ہاں، ابھی",
   symptomNo: "نہیں",
   movementYes: "ہاں، معمول کے مطابق",
@@ -174,6 +227,13 @@ const urdu: CheckInQuestionnaireCopy = {
   attentionBody:
     "آپ کے جوابات ایسی تبدیلی ظاہر کرتے ہیں جس کا آج جائزہ لینا چاہیے۔ اپنے صحت کارکن کو کال کریں، یا رابطے میں مدد کے لیے آنٹی سے کہیں۔ یہ ہنگامی اسکرین نہیں — علامات بگڑیں تو فوراً دیکھ بھال لیں۔",
   contactChwToday: "میرے صحت کارکن سے رابطہ کریں",
+  savedOnDevice: "اس فون پر محفوظ",
+  previousQuestion: "پچھلا سوال",
+  startNew: "نیا چیک اِن شروع کریں",
+  restartTitle: "نیا چیک اِن شروع کریں؟",
+  restartBody: "آپ کے ادھورے جوابات اس فون پر ہیں۔ رکھنے کے لیے جاری رکھیں، یا نئے سرے سے شروع کریں۔",
+  pauseToast: "پیش رفت اس فون پر محفوظ ہو گئی",
+  seeCarePlan: "میرا دیکھ بھال کا منصوبہ دیکھیں",
   progress: (current, total) => `${total} میں سے ${current}`,
 };
 
@@ -196,6 +256,12 @@ const tamil: CheckInQuestionnaireCopy = {
     reducedBabyMovement: "வழக்கத்தை விட குறைவான அசைவு",
     needsHelpScheduling: "பராமரிப்பு ஏற்பாட்டில் உதவி தேவை",
   },
+  imageAlt: {
+    severeBleedingOrPain: "கர்ப்பிணி பெண் வயிற்றில் கை வைத்து வலி அல்லது இரத்தப்போக்கைப் பார்க்கும் படம்.",
+    breathingDifficulty: "கர்ப்பிணி பெண் வெளியே அமைதியாக மூச்சு விடும் படம்.",
+    reducedBabyMovement: "கர்ப்பிணி பெண் குழந்தையின் அசைவை உணரும் படம்.",
+    needsHelpScheduling: "கர்ப்பிணி பெண் சமூக கிளினிக்கை நோக்கிச் செல்லும் படம்.",
+  },
   symptomYes: "ஆம், இப்போது",
   symptomNo: "இல்லை",
   movementYes: "ஆம், வழக்கம்போல்",
@@ -207,6 +273,13 @@ const tamil: CheckInQuestionnaireCopy = {
   attentionBody:
     "உங்கள் பதில்கள் இன்று மதிப்பாய்வு செய்ய வேண்டிய மாற்றத்தைக் காட்டுகின்றன. உங்கள் சுகாதாரப் பணியாளரை அழைக்கவும், அல்லது இணைக்க ஆண்டியிடம் உதவி கேளுங்கள். இது அவசரத் திரை அல்ல — அறிகுறிகள் மோசமானால் உடனே பராமரிப்பு பெறுங்கள்.",
   contactChwToday: "என் சுகாதாரப் பணியாளரை தொடர்பு கொள்ளுங்கள்",
+  savedOnDevice: "இந்த தொலைபேசியில் சேமிக்கப்பட்டது",
+  previousQuestion: "முந்தைய கேள்வி",
+  startNew: "புதிய செக்-இன் தொடங்கவும்",
+  restartTitle: "புதிய செக்-இன் தொடங்கவா?",
+  restartBody: "உங்கள் முடிக்காத பதில்கள் இந்த தொலைபேசியில் உள்ளன. வைத்திருக்க தொடரவும், அல்லது மீண்டும் தொடங்கவும்.",
+  pauseToast: "முன்னேற்றம் இந்த தொலைபேசியில் சேமிக்கப்பட்டது",
+  seeCarePlan: "என் பராமரிப்பு திட்டத்தைப் பார்க்கவும்",
   progress: (current, total) => `${total} இல் ${current}`,
 };
 
@@ -229,6 +302,12 @@ const telugu: CheckInQuestionnaireCopy = {
     reducedBabyMovement: "సాధారణం కంటే తక్కువ కదలిక",
     needsHelpScheduling: "సంరక్షణ ఏర్పాటులో సహాయం కావాలి",
   },
+  imageAlt: {
+    severeBleedingOrPain: "గర్భిణి స్త్రీ కడుపుపై చేయి ఉంచి నొప్పి లేదా రక్తస్రావం చూసుకుంటున్న చిత్రం.",
+    breathingDifficulty: "గర్భిణి స్త్రీ బయట ప్రశాంతంగా ఊపిరి తీసుకుంటున్న చిత్రం.",
+    reducedBabyMovement: "గర్భిణి స్త్రీ శిశువు కదలికను అనుభవిస్తున్న చిత్రం.",
+    needsHelpScheduling: "గర్భిణి స్త్రీ కమ్యూనిటీ క్లినిక్ వైపు వెళ్తున్న చిత్రం.",
+  },
   symptomYes: "అవును, ఇప్పుడే",
   symptomNo: "కాదు",
   movementYes: "అవును, సాధారణంగా",
@@ -240,6 +319,13 @@ const telugu: CheckInQuestionnaireCopy = {
   attentionBody:
     "మీ సమాధానాలు ఈరోజు సమీక్షించాల్సిన మార్పును చూపుతున్నాయి. మీ ఆరోగ్య కార్యకర్తను కాల్ చేయండి, లేదా కనెక్ట్ కావడానికి ఆంటీ సహాయం అడగండి. ఇది అత్యవసర స్క్రీన్ కాదు — లక్షణాలు అధ్వాన్నంగా ఉంటే వెంటనే సంరక్షణ పొందండి.",
   contactChwToday: "నా ఆరోగ్య కార్యకర్తను సంప్రదించండి",
+  savedOnDevice: "ఈ ఫోన్‌లో సేవ్ అయింది",
+  previousQuestion: "మునుపటి ప్రశ్న",
+  startNew: "కొత్త చెక్-ఇన్ ప్రారంభించండి",
+  restartTitle: "కొత్త చెక్-ఇన్ ప్రారంభించాలా?",
+  restartBody: "మీ అసంపూర్ణ సమాధానాలు ఈ ఫోన్‌లో ఉన్నాయి. ఉంచడానికి కొనసాగించండి, లేదా మళ్లీ ప్రారంభించండి.",
+  pauseToast: "పురోగతి ఈ ఫోన్‌లో సేవ్ అయింది",
+  seeCarePlan: "నా సంరక్షణ ప్రణాళిక చూడండి",
   progress: (current, total) => `${total}లో ${current}`,
 };
 

@@ -12,6 +12,28 @@ Reusable pattern for **human-centered phone-work orchestration** for community h
 6. Call command center with event timeline and correlation IDs
 7. Structured result → existing follow-up state machine
 8. Honest capability stance: UI language ≠ call language/region
+9. Server-first REST gateway (`/api/calle`) plus additive V4 layer (`server/calle-v4/`) for webhooks, reconciliation, and analytics
+
+## REST gateway (hackathon-ready)
+
+The mobile client never holds `CALLE_API_KEY`. It posts to the Express gateway:
+
+```
+POST /api/calle/calls
+GET  /api/calle/calls/:callId
+GET  /api/calle/calls/:callId/events
+POST /api/calle/webhook
+```
+
+Copy these modules into an upstream `awesome-phone-call-agents` app:
+
+- `server/calle/client.ts` — REST default, SDK retained, mock for CI
+- `server/calle/http.ts` — timeouts, retries, `Idempotency-Key`
+- `server/calle/api-service.ts` — create/get/events + idempotency store
+- `server/calle/router.ts` — `/api/calle` contract `{ ok, data }`
+- `shared/calleClient.ts` + `hooks/useCalleCall.ts` — polling UI
+
+Live evidence: a successful `POST /v1/calls` returns a `call_*` id. Mock evidence: `call_mock_*` with structured result + evidence.
 
 ## Hackathon entry points
 

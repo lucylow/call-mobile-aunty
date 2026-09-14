@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -20,18 +21,40 @@ async function uriToBase64(uri: string): Promise<{ base64: string; mimeType: str
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
-  return { base64: globalThis.btoa(binary), mimeType };
+  const bytesToBase64 =
+    typeof globalThis.btoa === "function"
+      ? (value: string) => globalThis.btoa(value)
+      : (value: string) => {
+          const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+          let output = "";
+          for (let i = 0; i < value.length; i += 3) {
+            const a = value.charCodeAt(i);
+            const b = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
+            const c = i + 2 < value.length ? value.charCodeAt(i + 2) : 0;
+            const triplet = (a << 16) | (b << 8) | c;
+            output += chars[(triplet >> 18) & 63] + chars[(triplet >> 12) & 63];
+            output += i + 1 < value.length ? chars[(triplet >> 6) & 63] : "=";
+            output += i + 2 < value.length ? chars[triplet & 63] : "=";
+          }
+          return output;
+        };
+  return { base64: bytesToBase64(binary), mimeType };
 }
 
 async function enableRecordingMode() {
-  await setAudioModeAsync({
-    allowsRecording: true,
-    playsInSilentMode: true,
-    interruptionMode: "mixWithOthers",
-    interruptionModeAndroid: "duckOthers",
-    shouldPlayInBackground: false,
-    shouldRouteThroughEarpiece: false,
-  });
+  if (Platform.OS === "web") return;
+  try {
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      interruptionMode: "mixWithOthers",
+      interruptionModeAndroid: "duckOthers",
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
+    });
+  } catch {
+    // Audio session setup is best-effort; start() reports recording failures.
+  }
 }
 
 export function useVoiceRecorder() {
@@ -44,7 +67,7 @@ export function useVoiceRecorder() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void enableRecordingMode();
+    void enableRecordingMode().catch(() => undefined);
   }, []);
 
   const start = useCallback(async () => {

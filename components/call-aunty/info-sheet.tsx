@@ -1,4 +1,5 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/use-colors";
 import { useUiTints } from "@/hooks/use-ui-tints";
@@ -26,13 +27,15 @@ export function InfoSheet({
 }: InfoSheetProps) {
   const colors = useColors();
   const tints = useUiTints();
+  const insets = useSafeAreaInsets();
   const primaryBackground =
     primaryTone === "coral" ? colors.coral : primaryTone === "danger" ? colors.error : colors.primary;
 
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.scrim, { backgroundColor: tints.scrim }]}>
-        <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={secondaryLabel} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 22) }]}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <Text accessibilityRole="header" style={[styles.title, { color: colors.foreground }]}>
             {title}

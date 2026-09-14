@@ -95,6 +95,78 @@ const MAP: Record<string, UserFacingError> = {
     userMessage: "Demo scenario could not run.",
     developerCode: "demo_scenario_failed",
   },
+  timeout: {
+    category: "network",
+    code: "timeout",
+    userMessage: "The phone provider timed out. Try again or use the dialer.",
+    developerCode: "timeout",
+  },
+  CALLE_TIMEOUT: {
+    category: "network",
+    code: "CALLE_TIMEOUT",
+    userMessage: "The phone provider timed out. Try again or use the dialer.",
+    developerCode: "CALLE_TIMEOUT",
+  },
+  CALLE_AUTH: {
+    category: "provider",
+    code: "CALLE_AUTH",
+    userMessage: "Phone provider authentication failed. Use the dialer or try again later.",
+    developerCode: "CALLE_AUTH",
+  },
+  CALLE_RATE_LIMIT: {
+    category: "provider",
+    code: "CALLE_RATE_LIMIT",
+    userMessage: "The phone provider is busy. Wait a moment and try again.",
+    developerCode: "CALLE_RATE_LIMIT",
+  },
+  CALLE_NETWORK: {
+    category: "network",
+    code: "CALLE_NETWORK",
+    userMessage: "Could not reach the phone provider. Check the connection and try again.",
+    developerCode: "CALLE_NETWORK",
+  },
+  CALLE_VALIDATION: {
+    category: "schema",
+    code: "CALLE_VALIDATION",
+    userMessage: "This call request is not valid. Check the number and try again.",
+    developerCode: "CALLE_VALIDATION",
+  },
+  retry_exhausted: {
+    category: "provider",
+    code: "retry_exhausted",
+    userMessage: "The phone provider could not complete this call. Try again later or use the dialer.",
+    developerCode: "retry_exhausted",
+  },
+  result_invalid: {
+    category: "schema",
+    code: "result_invalid",
+    userMessage: "The call result could not be read. Try again or use the dialer.",
+    developerCode: "result_invalid",
+  },
+  invalid_recipient: {
+    category: "schema",
+    code: "invalid_recipient",
+    userMessage: "Enter a valid phone number in international format, for example +15551234567.",
+    developerCode: "invalid_recipient",
+  },
+  call_failed: {
+    category: "provider",
+    code: "call_failed",
+    userMessage: "The call could not be completed. Try again or use the dialer.",
+    developerCode: "call_failed",
+  },
+  no_answer: {
+    category: "data",
+    code: "no_answer",
+    userMessage: "No one answered. You can try again later.",
+    developerCode: "no_answer",
+  },
+  internal_error: {
+    category: "data",
+    code: "internal_error",
+    userMessage: "Something went wrong with the phone workflow. Please try again.",
+    developerCode: "internal_error",
+  },
 };
 
 export function mapErrorToUserMessage(code: string): UserFacingError {

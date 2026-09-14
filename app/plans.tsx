@@ -2,19 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 
+import { BackLink } from "@/components/call-aunty/back-link";
+import { ScreenHeader } from "@/components/call-aunty/screen-header";
 import { ScreenContainer } from "@/components/screen-container";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useLanguage } from "@/contexts/language-context";
 import { useColors } from "@/hooks/use-colors";
 import { useUiTints } from "@/hooks/use-ui-tints";
-import {
-  DEMO_BILLING_CATALOG,
-  DEMO_ENTITLEMENTS,
-  DEMO_USAGE,
-} from "@/lib/demo-fallback";
+import { DEMO_BILLING_CATALOG, DEMO_ENTITLEMENTS, DEMO_USAGE } from "@/lib/demo-fallback";
 import { saveCachedEntitlements } from "@/lib/entitlements-cache";
 import { formatTrpcError } from "@/lib/format-trpc-error";
 import { trpc } from "@/lib/trpc";
+import { cardElevation } from "@/lib/ui-elevation";
 
 export default function PlansScreen() {
   const colors = useColors();
@@ -137,14 +135,9 @@ export default function PlansScreen() {
   return (
     <ScreenContainer className="px-5" containerClassName="bg-background">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => router.back()} style={styles.backRow} accessibilityRole="button">
-          <IconSymbol name="chevron.left" size={18} color={colors.coral} />
-          <Text style={{ color: colors.coral }}>{copy.back}</Text>
-        </Pressable>
+        <BackLink label={copy.back} onPress={() => router.back()} />
 
-        <Text style={[styles.eyebrow, { color: colors.coral }]}>{indicator}</Text>
-        <Text style={[styles.title, { color: colors.foreground }]}>{copy.title}</Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>{copy.subtitle}</Text>
+        <ScreenHeader eyebrow={indicator} title={copy.title} subtitle={copy.subtitle} />
 
         {usingDemoFallback || catalogQuery.isError ? (
           <View style={[styles.banner, { backgroundColor: tints.amberSoft, borderColor: colors.border }]}>
@@ -198,7 +191,15 @@ export default function PlansScreen() {
           return (
             <View
               key={planId}
-              style={[styles.planCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={[
+                styles.planCard,
+                cardElevation,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: isCurrent ? colors.coral : colors.border,
+                  borderWidth: isCurrent ? 2 : 1,
+                },
+              ]}
             >
               <View style={styles.planHeader}>
                 <Text style={[styles.planName, { color: colors.foreground }]}>{displayName}</Text>
@@ -246,10 +247,6 @@ export default function PlansScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: 10, paddingBottom: 36, gap: 14 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8 },
-  eyebrow: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" },
-  title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
-  subtitle: { fontSize: 15, lineHeight: 22 },
   banner: { borderRadius: 14, borderWidth: 1, padding: 12, gap: 8 },
   retryBtn: { alignSelf: "flex-start", borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   usageCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 4 },

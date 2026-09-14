@@ -50,9 +50,13 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
-    "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
+      NSAppTransportSecurity: {
+        NSAllowsLocalNetworking: true,
+      },
+      LSApplicationQueriesSchemes: ["tel", "https", "http"],
+    },
   },
   android: {
     adaptiveIcon: {
@@ -64,7 +68,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
-    permissions: ["POST_NOTIFICATIONS"],
+    permissions: ["POST_NOTIFICATIONS", "RECORD_AUDIO", "USE_BIOMETRIC", "USE_FINGERPRINT"],
     intentFilters: [
       {
         action: "VIEW",
@@ -85,8 +89,20 @@ const config: ExpoConfig = {
     favicon: "./assets/images/favicon.png",
   },
   plugins: [
-    "expo-background-task",
     "expo-router",
+    "expo-font",
+    "expo-web-browser",
+    "expo-localization",
+    "expo-secure-store",
+    "expo-task-manager",
+    "expo-background-task",
+    [
+      "expo-notifications",
+      {
+        color: "#4547A9",
+        defaultChannel: "default",
+      },
+    ],
     [
       "expo-audio",
       {
@@ -124,6 +140,7 @@ const config: ExpoConfig = {
         android: {
           buildArchs: ["armeabi-v7a", "arm64-v8a"],
           minSdkVersion: 24,
+          usesCleartextTraffic: true,
         },
       },
     ],

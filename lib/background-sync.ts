@@ -1,4 +1,3 @@
-import { Platform } from "react-native";
 import * as BackgroundTask from "expo-background-task";
 import * as Network from "expo-network";
 import * as TaskManager from "expo-task-manager";
@@ -30,10 +29,7 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     });
 
     await markQueueSynced(nextItem.id);
-    const metadataSaved = await saveLastSyncAt(new Date().toISOString());
-    if (!metadataSaved) {
-      // The follow-up is already marked synced; metadata loss must not cause a duplicate server write.
-    }
+    await saveLastSyncAt(new Date().toISOString());
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
     return BackgroundTask.BackgroundTaskResult.Failed;
@@ -41,7 +37,6 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
 });
 
 export async function registerBackgroundSync(): Promise<boolean> {
-  if (Platform.OS === "web") return false;
   try {
     const registered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
     if (!registered) {
@@ -54,7 +49,6 @@ export async function registerBackgroundSync(): Promise<boolean> {
 }
 
 export async function unregisterBackgroundSync(): Promise<boolean> {
-  if (Platform.OS === "web") return false;
   try {
     const registered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
     if (registered) await BackgroundTask.unregisterTaskAsync(BACKGROUND_SYNC_TASK);

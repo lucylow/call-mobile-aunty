@@ -3,6 +3,8 @@
  * Synthetic identities only — never real patient data.
  */
 
+import { OPERATOR_DASHBOARD_SNAPSHOT } from "./operator-dashboard";
+
 export const DEMO_BILLING_CATALOG = {
   catalogVersion: "v6-demo",
   synthetic: true as const,
@@ -105,56 +107,14 @@ export const DEMO_CALLE_CAPABILITIES = {
     mode: "demo" as const,
     indicator: "DEMO" as const,
   },
-  demoScenarios: ["instant_success", "no_answer", "safety_escalation"],
+  demoScenarios: ["instant_success", "no_answer", "safety_escalation", "busy", "voicemail"],
 };
 
 export const DEMO_COMMAND_CENTER = {
-  summary: {
-    pending: 2,
-    active: 0,
-    completed: 1,
-    blocked: 0,
-    failed: 0,
-    needs_review: 1,
-  },
-  calls: [
-    {
-      id: "demo-wf-asha-001",
-      bucket: "pending" as const,
-      phoneStatus: "queued" as const,
-      purpose: "follow_up_after_check_in",
-      womanId: "demo-ben-001",
-      recipientMasked: "+1•••555•0101",
-      status: "prepared" as const,
-      updatedAt: new Date().toISOString(),
-      dryRun: true,
-      canRetry: false,
-    },
-    {
-      id: "demo-wf-noora-002",
-      bucket: "needs_review" as const,
-      phoneStatus: "needs_review" as const,
-      purpose: "appointment_coordination",
-      womanId: "demo-ben-002",
-      recipientMasked: "+1•••555•0102",
-      status: "unknown" as const,
-      updatedAt: new Date(Date.now() - 3600_000).toISOString(),
-      dryRun: true,
-      canRetry: true,
-    },
-    {
-      id: "demo-wf-maya-003",
-      bucket: "completed" as const,
-      phoneStatus: "completed" as const,
-      purpose: "callback_confirmation",
-      womanId: "demo-ben-003",
-      recipientMasked: "+1•••555•0103",
-      status: "dry_run_completed" as const,
-      updatedAt: new Date(Date.now() - 7200_000).toISOString(),
-      dryRun: true,
-      canRetry: false,
-    },
-  ],
+  summary: OPERATOR_DASHBOARD_SNAPSHOT.summary,
+  calls: OPERATOR_DASHBOARD_SNAPSHOT.calls,
+  providerHealth: OPERATOR_DASHBOARD_SNAPSHOT.providerHealth,
+  incidents: OPERATOR_DASHBOARD_SNAPSHOT.incidents,
 };
 
 export const DEMO_CALL_DETAIL = {

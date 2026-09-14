@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { IconSymbol, type IconSymbolName } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 
+import { cardElevation } from "@/lib/ui-elevation";
+
 type ActionCardProps = {
   title: string;
   detail: string;
@@ -21,6 +23,7 @@ export function ActionCard({ title, detail, icon, color, accessibilityLabel, onP
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
+        cardElevation,
         { backgroundColor: colors.surface, borderColor: colors.border },
         pressed && styles.pressed,
       ]}

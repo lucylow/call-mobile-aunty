@@ -22,6 +22,8 @@ describe("demo fallback payloads", () => {
 
   it("exposes command-center demo calls with synthetic numbers only", () => {
     expect(DEMO_COMMAND_CENTER.calls.length).toBeGreaterThan(0);
+    expect(DEMO_COMMAND_CENTER.summary.pending + DEMO_COMMAND_CENTER.summary.active).toBeGreaterThan(0);
+    expect(DEMO_COMMAND_CENTER.incidents?.some((incident) => incident.kind === "failover")).toBe(true);
     for (const call of DEMO_COMMAND_CENTER.calls) {
       expect(call.recipientMasked).toContain("•");
       expect(call.dryRun).toBe(true);

@@ -9,6 +9,19 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   /** Server-only CALL-E API key. Never expose to Expo. */
   calleApiKey: process.env.CALLE_API_KEY ?? "",
+  calleBaseUrl: process.env.CALLE_BASE_URL ?? "https://api.heycall-e.com",
+  calleWebhookSecret: process.env.CALLE_WEBHOOK_SECRET ?? "",
+  calleTimeoutMs: Number.parseInt(process.env.CALLE_TIMEOUT_MS ?? "30000", 10) || 30_000,
+  callePollIntervalMs: Number.parseInt(process.env.CALLE_POLL_INTERVAL_MS ?? "2000", 10) || 2_000,
+  callePollTimeoutMs: Number.parseInt(process.env.CALLE_POLL_TIMEOUT_MS ?? "180000", 10) || 180_000,
+  calleMaxRetries: Number.parseInt(process.env.CALLE_MAX_RETRIES ?? "4", 10) || 4,
+  calleRetryBaseMs: Number.parseInt(process.env.CALLE_RETRY_BASE_MS ?? "500", 10) || 500,
+  calleAllowedRegions: process.env.CALLE_ALLOWED_REGIONS ?? "CA,US,GB,AU,SG,IN",
+  calleMockMode: process.env.CALLE_MOCK_MODE === "true",
+  /** Serve mock CALL-E fixtures when the live provider is unreachable. Default on. */
+  calleFallbackMock: process.env.CALLE_FALLBACK_MOCK !== "false",
+  calleTransport: process.env.CALLE_TRANSPORT === "sdk" ? "sdk" : "rest",
+  calleLiveTest: process.env.CALLE_LIVE_TEST === "true",
   /** Opt-in live calling. Default false → dry-run only. */
   calleLiveCalls: process.env.CALLE_LIVE_CALLS === "true",
   /** Hard disable outbound calling (forces dry-run / deny paths). */

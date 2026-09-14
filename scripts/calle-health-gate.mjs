@@ -14,7 +14,7 @@ const steps = [
   {
     name: "calle-tests",
     cmd: "pnpm",
-    args: ["exec", "vitest", "run", "tests/calle-workflow.test.ts", "tests/calle-v2.test.ts", "tests/calle-v3.test.ts", "tests/calle-v4.test.ts", "tests/calle-v5.test.ts", "tests/hackathon-e2e.test.ts", "tests/architecture-guard.test.ts"],
+    args: ["exec", "vitest", "run", "tests/calle-workflow.test.ts", "tests/calle-v2.test.ts", "tests/calle-v3.test.ts", "tests/calle-v4.test.ts", "tests/calle-v5.test.ts", "tests/hackathon-e2e.test.ts", "tests/architecture-guard.test.ts", "tests/calle-lifecycle-e2e.test.ts", "tests/calle.core.test.ts", "tests/calle.utilities.test.ts", "tests/calle.router.test.ts", "tests/calle-v4-api.test.ts", "tests/calle-v4.integration.test.ts"],
   },
 ];
 

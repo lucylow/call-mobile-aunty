@@ -26,5 +26,7 @@ describe("calle error taxonomy extensions", () => {
   it("maps billing-related call codes", () => {
     expect(mapErrorToUserMessage("insufficient_call_credits").userMessage).toContain("credit");
     expect(mapErrorToUserMessage("call_e_disabled").userMessage).toContain("disabled");
+    expect(mapErrorToUserMessage("timeout").userMessage).toContain("timed out");
+    expect(mapErrorToUserMessage("call_failed").userMessage).toContain("dialer");
   });
 });

@@ -7,4 +7,19 @@ export default defineConfig([
   {
     ignores: ["dist/*"],
   },
+  {
+    settings: {
+      "import/parsers": {
+        "@typescript-eslint/parser": [".ts", ".tsx"],
+      },
+      "import/resolver": {
+        typescript: true,
+        node: true,
+      },
+    },
+    rules: {
+      // Namespace analysis is unreliable with TS path aliases / type-only modules.
+      "import/namespace": "off",
+    },
+  },
 ]);

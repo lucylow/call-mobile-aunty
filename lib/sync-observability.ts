@@ -9,17 +9,33 @@ export type SyncObservabilitySummary = {
 };
 
 export function summarizeSyncQueue(items: SyncQueueItem[], maxAttempts = 5): SyncObservabilitySummary {
-  const latestAttemptAt = items
-    .map((item) => item.updatedAt)
-    .filter((timestamp) => !Number.isNaN(Date.parse(timestamp)))
-    .sort()
-    .at(-1) ?? null;
-
-  return {
-    queued: items.filter((item) => item.status === "queued" && item.attempts < maxAttempts).length,
-    retrying: items.filter((item) => item.status === "retrying" && item.attempts < maxAttempts).length,
-    synced: items.filter((item) => item.status === "synced").length,
-    exhausted: items.filter((item) => item.status !== "synced" && item.attempts >= maxAttempts).length,
-    latestAttemptAt,
+  const summary: SyncObservabilitySummary = {
+    queued: 0,
+    retrying: 0,
+    synced: 0,
+    exhausted: 0,
+    latestAttemptAt: null,
   };
+  let latestMs = Number.NEGATIVE_INFINITY;
+
+  for (const item of items) {
+    const ms = Date.parse(item.updatedAt);
+    if (!Number.isNaN(ms) && ms >= latestMs) {
+      latestMs = ms;
+      summary.latestAttemptAt = item.updatedAt;
+    }
+
+    if (item.status === "synced") {
+      summary.synced += 1;
+      continue;
+    }
+    if (item.attempts >= maxAttempts) {
+      summary.exhausted += 1;
+      continue;
+    }
+    if (item.status === "queued") summary.queued += 1;
+    else if (item.status === "retrying") summary.retrying += 1;
+  }
+
+  return summary;
 }

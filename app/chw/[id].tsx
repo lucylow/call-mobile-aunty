@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { ActionCard } from "@/components/call-aunty/action-card";
+import { BackLink } from "@/components/call-aunty/back-link";
 import { InfoSheet } from "@/components/call-aunty/info-sheet";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useLanguage } from "@/contexts/language-context";
 import { useColors } from "@/hooks/use-colors";
 import { useUiTints } from "@/hooks/use-ui-tints";
-import { getChwDetailCopy } from "@/lib/app-copy";
+import { getAppCopy, getChwDetailCopy } from "@/lib/app-copy";
+import { DEMO_QUEUE, getChwQueueRecord } from "@/lib/demo-queue";
+import { getFieldActivityCopy, getHousehold, householdName, localize } from "@/lib/mock-households";
 import { openPhoneHandoff } from "@/lib/contact-handoff";
 import { completeFollowUp, type FollowUpDraft } from "@/lib/follow-up";
 import { saveCompletedFollowUp } from "@/lib/follow-up-store";
-import { loadLanguage, type AppLanguage } from "@/lib/language";
 import { formatTrpcError, isUpgradeRelatedError } from "@/lib/format-trpc-error";
 import { enqueueFollowUp } from "@/lib/sync-queue";
+import { firstRouteParam } from "@/lib/route-params";
 import { trpc } from "@/lib/trpc";
 
 const DEMO_RECIPIENT_E164 = "+15555550123";
@@ -24,8 +28,9 @@ const DEMO_CALL_LANGUAGE = "en";
 export default function WomanRecordScreen() {
   const colors = useColors();
   const tints = useUiTints();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [language, setLanguage] = useState<AppLanguage>("bn");
+  const { id: rawId } = useLocalSearchParams<{ id: string }>();
+  const { language } = useLanguage();
+  const id = firstRouteParam(rawId);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [phase, setPhase] = useState<"idle" | "prepared" | "running" | "done">("idle");
   const [workflowId, setWorkflowId] = useState<string | null>(null);
@@ -43,7 +48,27 @@ export default function WomanRecordScreen() {
   const [modeIndicator, setModeIndicator] = useState("DEMO");
 
   const copy = getChwDetailCopy(language);
-  const displayName = id ? decodeURIComponent(id) : copy.eyebrow;
+  const activity = getFieldActivityCopy(language);
+  const household = getHousehold(id);
+  const queueCopy = getAppCopy(language);
+  const queueItem = DEMO_QUEUE.find((item) => item.id === id);
+  const displayName = household
+    ? householdName(household, language)
+    : queueItem
+      ? getChwQueueRecord(queueCopy.chwQueue, queueItem).name
+      : id || copy.eyebrow;
+  const womanId = household?.id ?? (id ? id : displayName);
+  const weeksMeta = household
+    ? `${localize(household.meta, language)} · ${localize(household.village, language)}`
+    : copy.weeksMeta;
+  const alertTitle = household
+    ? household.consent !== "granted"
+      ? activity.outcome.consent_hold
+      : household.timeline.some((event) => event.outcome === "safety")
+        ? activity.outcome.safety
+        : localize(household.openTask, language)
+    : copy.referralTitle;
+  const alertBody = household ? localize(household.notes, language) : copy.referralBody;
 
   const prepareMutation = trpc.calle.prepare.useMutation();
   const confirmMutation = trpc.calle.confirm.useMutation();
@@ -57,10 +82,6 @@ export default function WomanRecordScreen() {
       capabilitiesQuery.data?.publicConfig?.indicator;
     if (indicator) setModeIndicator(indicator);
   }, [capabilitiesQuery.data?.v5Flags?.indicator, capabilitiesQuery.data?.publicConfig?.indicator]);
-
-  useEffect(() => {
-    void loadLanguage().then(setLanguage).catch(() => setLanguage("bn"));
-  }, []);
 
   const sheetBody = useMemo(() => {
     if (!workflowId) {
@@ -117,7 +138,7 @@ export default function WomanRecordScreen() {
   async function prepareWorkflow() {
     try {
       const result = await prepareMutation.mutateAsync({
-        womanId: displayName,
+        womanId,
         purpose: "follow_up_after_check_in",
         recipientE164: DEMO_RECIPIENT_E164,
         recipientRegion: DEMO_RECIPIENT_REGION,
@@ -174,7 +195,7 @@ export default function WomanRecordScreen() {
 
       if (result.followUp) {
         const draft: FollowUpDraft = {
-          womanId: displayName,
+          womanId,
           contactMethod: result.followUp.contactMethod,
           outcome: result.followUp.outcome,
           note: result.followUp.note,
@@ -198,7 +219,7 @@ export default function WomanRecordScreen() {
         Alert.alert(copy.resultSaved, result.followUp.note, [
           {
             text: copy.captureTitle,
-            onPress: () => router.push({ pathname: "/chw/follow-up", params: { id: displayName } }),
+            onPress: () => router.push({ pathname: "/chw/follow-up", params: { id: womanId } }),
           },
           { text: "OK" },
         ]);
@@ -226,20 +247,7 @@ export default function WomanRecordScreen() {
   return (
     <ScreenContainer className="px-5" containerClassName="bg-background">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={copy.back}
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-        >
-          <IconSymbol
-            name="chevron.right"
-            size={20}
-            color={colors.foreground}
-            style={{ transform: [{ rotate: "180deg" }] }}
-          />
-          <Text style={[styles.backText, { color: colors.foreground }]}>{copy.back}</Text>
-        </Pressable>
+        <BackLink label={copy.back} onPress={() => router.back()} />
 
         <View style={styles.header}>
           <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
@@ -248,16 +256,16 @@ export default function WomanRecordScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.eyebrow, { color: colors.coral }]}>{copy.eyebrow}</Text>
             <Text style={[styles.title, { color: colors.foreground }]}>{displayName}</Text>
-            <Text style={[styles.meta, { color: colors.muted }]}>{copy.weeksMeta}</Text>
+            <Text style={[styles.meta, { color: colors.muted }]}>{weeksMeta}</Text>
           </View>
         </View>
 
-        <View style={[styles.alert, { backgroundColor: tints.coralSoft, borderColor: tints.coralBorder }]}>
-          <View style={[styles.bannerAccent, { backgroundColor: colors.error }]} />
-          <IconSymbol name="exclamationmark.triangle.fill" size={21} color={colors.error} />
+        <View style={[styles.alert, { backgroundColor: household?.tone === "routine" ? tints.mintSoft : household?.tone === "attention" ? tints.amberSoft : tints.coralSoft, borderColor: household?.tone === "routine" ? colors.success : household?.tone === "attention" ? colors.warning : tints.coralBorder }]}>
+          <View style={[styles.bannerAccent, { backgroundColor: household?.tone === "routine" ? colors.success : household?.tone === "attention" ? colors.warning : colors.error }]} />
+          <IconSymbol name={household?.tone === "routine" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"} size={21} color={household?.tone === "routine" ? colors.success : household?.tone === "attention" ? colors.warning : colors.error} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, { color: colors.foreground }]}>{copy.referralTitle}</Text>
-            <Text style={[styles.meta, { color: colors.muted }]}>{copy.referralBody}</Text>
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>{alertTitle}</Text>
+            <Text style={[styles.meta, { color: colors.muted }]}>{alertBody}</Text>
           </View>
         </View>
 
@@ -277,7 +285,7 @@ export default function WomanRecordScreen() {
           icon="checkmark.circle.fill"
           color={colors.primary}
           accessibilityLabel={copy.captureLabel}
-          onPress={() => router.push({ pathname: "/chw/follow-up", params: { id: displayName } })}
+          onPress={() => router.push({ pathname: "/chw/follow-up", params: { id: womanId } })}
         />
         <ActionCard
           title={copy.callTitle}
@@ -302,13 +310,24 @@ export default function WomanRecordScreen() {
         >
           <IconSymbol name="list.bullet.rectangle" size={18} color={colors.coral} />
           <Text style={[styles.meta, { color: colors.coral, flex: 1 }]}>
-            {language === "bn" ? "কল কমান্ড সেন্টার" : "Open call command center"}
+            {copy.commandCenter}
+          </Text>
+          <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/calle-agent" as Href)}
+          style={[styles.commandLink, { borderColor: colors.border }]}
+        >
+          <IconSymbol name="phone.fill" size={18} color={colors.coral} />
+          <Text style={[styles.meta, { color: colors.coral, flex: 1 }]}>
+            {copy.calleAgent}
           </Text>
           <IconSymbol name="chevron.right" size={14} color={colors.muted} />
         </Pressable>
         <ActionCard
           title={copy.dialerFallback}
-          detail="Manual dialer handoff if CALL-E is unavailable"
+          detail={copy.dialerFallbackDetail}
           icon="phone.fill"
           color={colors.muted}
           accessibilityLabel={copy.dialerFallback}
@@ -317,10 +336,32 @@ export default function WomanRecordScreen() {
 
         <Text style={[styles.section, { color: colors.foreground }]}>{copy.summary}</Text>
         <View style={[styles.summary, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <SummaryRow label={copy.lastCheckIn} value={copy.lastCheckInValue} colors={colors} last={false} />
-          <SummaryRow label={copy.careContact} value={copy.careContactValue} colors={colors} last={false} />
-          <SummaryRow label={copy.openTask} value={copy.openTaskValue} colors={colors} last />
+          <SummaryRow label={copy.lastCheckIn} value={household ? localize(household.lastCheckIn, language) : copy.lastCheckInValue} colors={colors} last={false} />
+          <SummaryRow label={copy.careContact} value={household ? localize(household.careContact, language) : copy.careContactValue} colors={colors} last={false} />
+          <SummaryRow label={copy.openTask} value={household ? localize(household.openTask, language) : copy.openTaskValue} colors={colors} last={!household} />
+          {household ? (
+            <>
+              <SummaryRow label={activity.village} value={localize(household.village, language)} colors={colors} last={false} />
+              <SummaryRow label={activity.iron} value={localize(household.ironStatus, language)} colors={colors} last={false} />
+              <SummaryRow label={activity.window} value={localize(household.callbackWindow, language)} colors={colors} last />
+            </>
+          ) : null}
         </View>
+
+        {household ? (
+          <>
+            <Text style={[styles.section, { color: colors.foreground }]}>{activity.timeline}</Text>
+            {household.timeline.map((event) => (
+              <View key={event.id} style={[styles.timelineCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.cardTitle, { color: colors.foreground }]}>
+                  {activity.channel[event.channel]} · {activity.outcome[event.outcome]}
+                </Text>
+                <Text style={[styles.meta, { color: colors.muted }]}>{localize(event.summary, language)}</Text>
+                <Text style={[styles.meta, { color: colors.muted }]}>{localize(event.at, language)}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
       </ScrollView>
 
       <InfoSheet
@@ -409,4 +450,5 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.78 },
   statusChip: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 },
   statusText: { fontSize: 13, fontWeight: "800" },
+  timelineCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 4 },
 });

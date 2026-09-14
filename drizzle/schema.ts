@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -162,6 +162,59 @@ export const billingCallCredits = mysqlTable("billing_call_credits", {
   balance: int("balance").notNull().default(0),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
+
+/**
+ * CALL-E API-integration layer (hackathon V4 pack).
+ * Separate from `call_workflows` so the existing CHW workflow store is unchanged.
+ * Phone numbers live only inside payloadJson on the server.
+ */
+export const calleApiCalls = mysqlTable(
+  "calle_api_calls",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    providerCallId: varchar("providerCallId", { length: 128 }).notNull(),
+    userId: varchar("userId", { length: 64 }).notNull(),
+    status: varchar("status", { length: 32 }).notNull(),
+    task: text("task").notNull(),
+    structuredResultJson: text("structuredResultJson"),
+    summary: text("summary"),
+    taskCompleted: int("taskCompleted"),
+    completionConfidence: int("completionConfidence"),
+    metadataJson: text("metadataJson").notNull(),
+    payloadJson: text("payloadJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("calle_api_calls_user_idx").on(table.userId),
+    statusIdx: index("calle_api_calls_status_idx").on(table.status),
+    providerIdx: uniqueIndex("calle_api_calls_provider_idx").on(table.providerCallId),
+  }),
+);
+
+export const calleApiEvents = mysqlTable(
+  "calle_api_events",
+  {
+    id: varchar("id", { length: 128 }).primaryKey(),
+    providerCallId: varchar("providerCallId", { length: 128 }).notNull(),
+    type: varchar("type", { length: 64 }).notNull(),
+    payloadJson: text("payloadJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    callIdx: index("calle_api_events_call_idx").on(table.providerCallId),
+  }),
+);
+
+export const calleApiIdempotency = mysqlTable("calle_api_idempotency", {
+  key: varchar("key", { length: 64 }).primaryKey(),
+  providerCallId: varchar("providerCallId", { length: 128 }).notNull(),
+  requestHash: varchar("requestHash", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CalleApiCallRecord = typeof calleApiCalls.$inferSelect;
+export type CalleApiEventRecord = typeof calleApiEvents.$inferSelect;
 
 export const billingAuditEvents = mysqlTable("billing_audit_events", {
   entryId: varchar("entryId", { length: 64 }).primaryKey(),

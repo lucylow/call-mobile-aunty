@@ -56,3 +56,7 @@ export function assertJobTransition(from: CallWorkflowStatus, to: CallWorkflowSt
 export function isTerminalJobState(state: CallJobState): boolean {
   return state === "completed" || state === "cancelled" || state === "failed";
 }
+
+export function isTerminalWorkflowStatus(status: CallWorkflowStatus): boolean {
+  return isTerminalJobState(workflowStatusToJobState(status));
+}

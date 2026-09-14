@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/use-colors";
 import { useUiTints } from "@/hooks/use-ui-tints";
+import { cardElevation } from "@/lib/ui-elevation";
 
 type FeedbackToastProps = {
   visible: boolean;
@@ -31,7 +32,7 @@ export function FeedbackToast({ visible, message, tone = "neutral", onHide, dura
 
   return (
     <View pointerEvents="none" style={styles.wrap} accessibilityLiveRegion="polite" accessibilityRole="text">
-      <View style={[styles.toast, { backgroundColor, borderColor: colors.border }]}>
+      <View style={[styles.toast, cardElevation, { backgroundColor, borderColor: colors.border }]}>
         <Text style={[styles.message, { color: textColor }]}>{message}</Text>
       </View>
     </View>
@@ -43,7 +44,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    bottom: 24,
+    bottom: 96,
     zIndex: 40,
   },
   toast: {

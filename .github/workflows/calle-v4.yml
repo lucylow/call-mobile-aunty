@@ -1,0 +1,34 @@
+name: CALL-E API V4
+on:
+  push:
+    paths:
+      - "server/calle-v4/**"
+      - "lib/calle-v4/**"
+      - "hooks/use-calle-call.ts"
+      - "components/calle-v4/**"
+      - "tests/calle-v4*.test.ts"
+      - "drizzle/schema.ts"
+  pull_request:
+    paths:
+      - "server/calle-v4/**"
+      - "lib/calle-v4/**"
+      - "hooks/use-calle-call.ts"
+      - "components/calle-v4/**"
+      - "tests/calle-v4*.test.ts"
+      - "drizzle/schema.ts"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run tests/calle-v4.integration.test.ts tests/calle-v4-api.test.ts
+        env:
+          CALLE_DEMO_MODE: "true"

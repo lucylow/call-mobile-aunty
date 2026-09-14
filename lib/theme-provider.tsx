@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Appearance, View, useColorScheme as useSystemColorScheme } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 
+import { loadAppearancePreference, saveAppearancePreference } from "@/lib/appearance-preferences";
 import { SchemeColors, type ColorScheme } from "@/constants/theme";
 
 type ThemeContextValue = {
@@ -32,6 +33,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setColorScheme = useCallback((scheme: ColorScheme) => {
     setColorSchemeState(scheme);
     applyScheme(scheme);
+    void saveAppearancePreference(scheme);
+  }, [applyScheme]);
+
+  useEffect(() => {
+    let mounted = true;
+    void loadAppearancePreference().then((saved) => {
+      if (!mounted || !saved) return;
+      setColorSchemeState(saved);
+      applyScheme(saved);
+    });
+    return () => {
+      mounted = false;
+    };
   }, [applyScheme]);
 
   useEffect(() => {

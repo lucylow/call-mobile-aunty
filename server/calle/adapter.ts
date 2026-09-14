@@ -1,15 +1,20 @@
+import { CalleGateway } from "./client";
+import { calleConfig } from "./config";
 import {
   CALL_E_RESULT_JSON_SCHEMA,
   callStructuredResultSchema,
   type CallFailureCode,
   type CallPurpose,
   type CallStructuredResult,
+  type CallTask,
   type CallWorkflowStatus,
 } from "./types";
 import { normalizeStructuredResult } from "./normalize-result";
 import { buildFollowUpTask } from "./call-plan";
 import { isDemoMode } from "./demo-mode";
 import { FakeCalleRuntime, type DemoScenarioId } from "./fake-runtime";
+import { CalleError, toCallFailureCode } from "./errors";
+import { createFailoverCalleAdapter } from "./provider-failover";
 
 export type PlaceCallCommand = {
   workflowId: string;
@@ -21,6 +26,14 @@ export type PlaceCallCommand = {
   dryRun: boolean;
 };
 
+export type FailoverAttempt = {
+  providerId: string;
+  accepted: boolean;
+  status: CallWorkflowStatus;
+  failureCode: CallFailureCode | null;
+  providerCallId: string | null;
+};
+
 export type ProviderCallResult = {
   providerCallId: string;
   status: CallWorkflowStatus;
@@ -28,6 +41,9 @@ export type ProviderCallResult = {
   failureCode: CallFailureCode | null;
   taskCompleted?: boolean | null;
   completionConfidence?: number | null;
+  /** Winning phone API when failover is configured. */
+  phoneProviderId?: string;
+  failoverAttempts?: FailoverAttempt[];
 };
 
 export interface CalleAdapter {
@@ -102,61 +118,67 @@ function confidenceToNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function readTaskField<T>(call: CallTask | Record<string, unknown>, snake: string, camel: string): T | undefined {
+  const record = call as Record<string, unknown>;
+  return (record[snake] as T | undefined) ?? (record[camel] as T | undefined);
+}
+
+function toProviderResult(call: CallTask, fallbackId: string): ProviderCallResult {
+  const structured = readTaskField<unknown>(call, "structured_result", "structuredResult");
+  const taskCompleted = readTaskField<boolean | null>(call, "task_completed", "taskCompleted");
+  const failureCode = readTaskField<CallFailureCode | null>(call, "failure_code", "failureCode");
+  const completion = readTaskField<{ score?: number } | number | null>(
+    call,
+    "completion_confidence",
+    "completionConfidence",
+  );
+  const normalized = normalizeStructuredResult(structured);
+  return {
+    providerCallId: call.id ?? fallbackId,
+    status: mapProviderStatus(call.status, taskCompleted),
+    structuredResult: normalized,
+    failureCode: normalized ? (failureCode ?? null) : "result_invalid",
+    taskCompleted,
+    completionConfidence: confidenceToNumber(
+      completion && typeof completion === "object" ? completion.score : completion,
+    ),
+  };
+}
+
 export class LiveCalleAdapter implements CalleAdapter {
   constructor(private readonly apiKey: string) {}
 
-  private async client() {
-    try {
-      const mod = await import("@call-e/calle");
-      return new mod.CalleClient({ apiKey: this.apiKey });
-    } catch {
-      throw Object.assign(new Error("CALL-E SDK unavailable"), {
-        code: "provider_unavailable" as CallFailureCode,
-      });
-    }
+  private gateway() {
+    return new CalleGateway(calleConfig.transport === "sdk" ? "sdk" : "rest");
   }
 
   async placeFollowUpCall(command: PlaceCallCommand): Promise<ProviderCallResult> {
     if (command.dryRun) return dryRunResult(command.workflowId);
     try {
-      const client = await this.client();
-      const call = await client.calls.createAndWait(
-        {
-          task: buildFollowUpTask({
-            recipientE164: command.recipientE164,
-            purpose: command.purpose,
-            callLanguage: command.callLanguage,
-          }),
-          recipient: {
-            phone: command.recipientE164,
+      const call = await this.gateway().createAndWait({
+        task: buildFollowUpTask({
+          recipientE164: command.recipientE164,
+          purpose: command.purpose,
+          callLanguage: command.callLanguage,
+        }),
+        recipients: [
+          {
+            phones: [command.recipientE164],
             region: command.recipientRegion,
             locale: command.callLanguage,
           },
-          resultSchema: CALL_E_RESULT_JSON_SCHEMA as unknown as Record<string, unknown>,
-          metadata: {
-            workflowId: command.workflowId,
-            purpose: command.purpose,
-            product: "call-aunty",
-          },
+        ],
+        resultSchema: CALL_E_RESULT_JSON_SCHEMA as never,
+        metadata: {
+          workflowId: command.workflowId,
+          purpose: command.purpose,
+          product: "call-aunty",
         },
-        { idempotencyKey: command.idempotencyKey },
-      );
-      const normalized = normalizeStructuredResult(call.structuredResult);
-      return {
-        providerCallId: call.id ?? `calle_${command.workflowId}`,
-        status: mapProviderStatus(call.status, call.taskCompleted),
-        structuredResult: normalized,
-        failureCode: normalized
-          ? ((call.failureCode as CallFailureCode | null) ?? null)
-          : "result_invalid",
-        taskCompleted: call.taskCompleted,
-        completionConfidence: confidenceToNumber(call.completionConfidence),
-      };
+        idempotencyKey: command.idempotencyKey,
+      });
+      return toProviderResult(call, `calle_${command.workflowId}`);
     } catch (error) {
-      const code =
-        error && typeof error === "object" && "code" in error
-          ? ((error as { code: CallFailureCode }).code ?? "provider_unavailable")
-          : "provider_unavailable";
+      const code = toCallFailureCode(error);
       return {
         providerCallId: `failed_${command.workflowId}`,
         status: "failed",
@@ -171,32 +193,43 @@ export class LiveCalleAdapter implements CalleAdapter {
       return dryRunResult(providerCallId.replace(/^dryrun_/, ""));
     }
     try {
-      const client = await this.client();
-      const call = await client.calls.get(providerCallId);
-      const normalized = normalizeStructuredResult(call.structuredResult);
-      return {
-        providerCallId: call.id ?? providerCallId,
-        status: mapProviderStatus(call.status, call.taskCompleted),
-        structuredResult: normalized,
-        failureCode: (call.failureCode as CallFailureCode | null) ?? null,
-      };
-    } catch {
+      const call = await this.gateway().getCall(providerCallId);
+      return toProviderResult(call, providerCallId);
+    } catch (error) {
       return {
         providerCallId,
         status: "unknown",
         structuredResult: null,
-        failureCode: "provider_unavailable",
+        failureCode: toCallFailureCode(error),
       };
     }
   }
 
   async cancel(providerCallId: string): Promise<ProviderCallResult> {
-    return {
-      providerCallId,
-      status: "cancelled",
-      structuredResult: null,
-      failureCode: "cancelled",
-    };
+    try {
+      if (!providerCallId.trim()) {
+        return {
+          providerCallId: "unknown",
+          status: "failed",
+          structuredResult: null,
+          failureCode: "result_invalid",
+        };
+      }
+      // SDK has no cancel operation; keep local cancel so CHW stop is fail-safe.
+      return {
+        providerCallId,
+        status: "cancelled",
+        structuredResult: null,
+        failureCode: "cancelled",
+      };
+    } catch (error) {
+      return {
+        providerCallId,
+        status: "failed",
+        structuredResult: null,
+        failureCode: error instanceof CalleError ? toCallFailureCode(error) : "internal_error",
+      };
+    }
   }
 }
 
@@ -204,10 +237,30 @@ export function createCalleAdapter(opts: {
   apiKey: string;
   liveCallsEnabled: boolean;
   demoScenario?: DemoScenarioId;
+  fallbackAdapters?: CalleAdapter[];
 }): CalleAdapter {
+  let primary: CalleAdapter;
   if (isDemoMode()) {
-    return new FakeCalleRuntime(opts.demoScenario ?? "instant_success");
+    primary = new FakeCalleRuntime(opts.demoScenario ?? "instant_success");
+  } else if (!opts.liveCallsEnabled || !opts.apiKey) {
+    primary = new DryRunCalleAdapter();
+  } else {
+    primary = new LiveCalleAdapter(opts.apiKey);
   }
-  if (!opts.liveCallsEnabled || !opts.apiKey) return new DryRunCalleAdapter();
-  return new LiveCalleAdapter(opts.apiKey);
+
+  const fallbacks = [...(opts.fallbackAdapters?.filter(Boolean) ?? [])];
+  if (primary instanceof LiveCalleAdapter && fallbacks.length === 0 && calleConfig.fallbackMock !== false) {
+    fallbacks.push(new FakeCalleRuntime(opts.demoScenario ?? "instant_success"));
+  }
+  if (fallbacks.length === 0) return primary;
+
+  return createFailoverCalleAdapter({
+    providers: [
+      { id: "call-e", adapter: primary },
+      ...fallbacks.map((adapter, index) => ({
+        id: index === 0 ? "backup-phone-api" : `phone-api-${index + 2}`,
+        adapter,
+      })),
+    ],
+  });
 }

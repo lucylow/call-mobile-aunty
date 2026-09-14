@@ -21,6 +21,11 @@ function clampQuestionIndex(questionIndex: number): number {
   return Math.max(0, Math.min(CHECK_IN_QUESTION_COUNT - 1, Math.trunc(questionIndex)));
 }
 
+/** Move one question back without changing saved answers. */
+export function previousCheckInQuestion(questionIndex: number): number {
+  return Math.max(0, clampQuestionIndex(questionIndex) - 1);
+}
+
 /** Apply one yes/no tap and return the next questionnaire state. */
 export function applyCheckInAnswer(
   questionIndex: number,

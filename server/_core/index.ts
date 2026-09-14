@@ -5,6 +5,8 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
+import { registerCalleV4Routes } from "../calle-v4/register";
+import { registerCalleRoutes, registerCalleWebhook } from "./calle-registration";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 
@@ -40,7 +42,7 @@ async function startServer() {
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header(
       "Access-Control-Allow-Headers",
-      "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Id, X-Calle-Signature, Idempotency-Key",
     );
     res.header("Access-Control-Allow-Credentials", "true");
 
@@ -52,11 +54,26 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: "50mb" }));
+  // HMAC webhooks need the raw body. Register the pack webhook before JSON parsing.
+  registerCalleWebhook(app);
+
+  app.use(
+    express.json({
+      limit: "50mb",
+      verify: (req, _res, buf) => {
+        if (req.url?.includes("/api/calle/webhook")) {
+          (req as typeof req & { rawBody?: Buffer }).rawBody = buf;
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Pack contract ({ ok, data }) is registered first; v4 extra routes still fall through.
+  registerCalleRoutes(app);
+  registerCalleV4Routes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
@@ -77,8 +94,8 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`[api] server listening on port ${port}`);
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`[api] server listening on 0.0.0.0:${port} (Expo Go / simulators can reach this host)`);
   });
 }
 

@@ -38,7 +38,7 @@ export function VoicePromptCard({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         onPress={onPress}
-        style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.action, { backgroundColor: colors.surface }, pressed && styles.pressed]}
       >
         <Text style={[styles.actionText, { color: colors.coral }]}>{actionLabel}</Text>
       </Pressable>
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 3 },
   title: { fontSize: 15, fontWeight: "800" },
   body: { fontSize: 12, lineHeight: 18 },
-  action: { paddingHorizontal: 6, paddingVertical: 8 },
+  action: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   actionText: { fontSize: 13, fontWeight: "800" },
   pressed: { opacity: 0.78 },
 });

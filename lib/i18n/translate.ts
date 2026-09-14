@@ -1,9 +1,16 @@
 import type { AppLanguage } from "@/lib/language";
-import { FALLBACK_LANGUAGE_CHAIN, getLanguageDefinition } from "./language-registry";
-import { LOCALE_PACKS, resolveTreeValue } from "./catalog";
+import { FALLBACK_LANGUAGE_CHAIN, getLanguageDefinition, SUPPORTED_UI_LANGUAGES } from "./language-registry";
+import { resolveFlatValue } from "./catalog";
 import type { InterpolationValues } from "./types";
 
 const missingKeyLog = new Set<string>();
+
+const FALLBACK_CHAINS = Object.fromEntries(
+  SUPPORTED_UI_LANGUAGES.map((language) => [
+    language,
+    [language, ...FALLBACK_LANGUAGE_CHAIN.filter((item) => item !== language)],
+  ]),
+) as unknown as Record<AppLanguage, readonly AppLanguage[]>;
 
 function interpolate(template: string, values?: InterpolationValues): string {
   if (!values) return template;
@@ -14,9 +21,9 @@ function interpolate(template: string, values?: InterpolationValues): string {
 }
 
 function resolveKey(language: AppLanguage, key: string): { value?: string; resolvedLanguage: AppLanguage } {
-  const chain: AppLanguage[] = [language, ...FALLBACK_LANGUAGE_CHAIN.filter((l) => l !== language)];
+  const chain = FALLBACK_CHAINS[language] ?? [language, "en"];
   for (const lang of chain) {
-    const value = resolveTreeValue(LOCALE_PACKS[lang], key);
+    const value = resolveFlatValue(lang, key);
     if (value !== undefined) return { value, resolvedLanguage: lang };
   }
   return { resolvedLanguage: language };
@@ -34,7 +41,7 @@ export type TranslateOptions = {
  * Fallback: requested → English. Never shows raw keys in production.
  */
 export function t(key: string, options: TranslateOptions): string {
-  const { value, resolvedLanguage } = resolveKey(options.language, key);
+  const { value } = resolveKey(options.language, key);
   if (value !== undefined) {
     return interpolate(value, options.values);
   }
@@ -61,9 +68,9 @@ export function pluralize(
   const category = rules.select(count);
   const keyed = `${keyBase}.${category}`;
   const specific = resolveKey(language, keyed).value;
-  if (specific) return t(keyed, { ...options, language });
+  if (specific) return interpolate(specific, options?.values);
   const other = resolveKey(language, `${keyBase}.other`).value;
-  if (other) return t(`${keyBase}.other`, { ...options, language, values: { ...options?.values, count } });
+  if (other) return interpolate(other, { ...options?.values, count });
   return t(`${keyBase}.one`, { ...options, language, values: { ...options?.values, count } });
 }
 

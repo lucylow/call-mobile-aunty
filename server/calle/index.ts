@@ -1,4 +1,15 @@
 export { createCalleAdapter, DryRunCalleAdapter, LiveCalleAdapter } from "./adapter";
+export {
+  FailoverCalleAdapter,
+  createFailoverCalleAdapter,
+  defaultFailoverPolicy,
+  isFailoverEligible,
+  wasCallAccepted,
+} from "./provider-failover";
+export {
+  PollingPhoneApiAdapter,
+  ScriptedPhoneApiAdapter,
+} from "./phone-api-adapters";
 export { getCapabilitySnapshot, CALLE_CAPABILITY } from "./capabilities";
 export { loadCalleConfig, getCallePublicConfig, toPolicyEnv } from "./config";
 export { listDemoBeneficiaries, getDemoBeneficiary, DEMO_BENEFICIARIES } from "./demo-data";
@@ -33,5 +44,9 @@ export {
   CALLE_SUPPORTED_REGIONS,
   CALLE_SUPPORTED_CALL_LANGUAGES,
 } from "./policy";
-export { calleService, createCalleService, maskE164 } from "./service";
+export { calleService, createCalleService, maskE164, CalleService } from "./service";
+export { CalleGateway } from "./client";
+export { calleConfig, requireCalleApiKey } from "./config";
+export { validateCallPolicy } from "./api-policy";
+export { calleRouter } from "./router";
 export * from "./types";

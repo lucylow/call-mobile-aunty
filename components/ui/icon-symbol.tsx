@@ -20,6 +20,9 @@ const MAPPING = {
   "chevron.right": "chevron-right",
   "chevron.left": "chevron-left",
   "heart.fill": "favorite",
+  "drop.fill": "water-drop",
+  "lungs.fill": "air",
+  "figure.and.child.holdinghands": "child-care",
   "calendar": "event",
   "person.2.fill": "people",
   "phone.fill": "phone",
@@ -35,6 +38,14 @@ const MAPPING = {
   "play.fill": "play-arrow",
   "list.bullet.rectangle": "view-list",
   "creditcard.fill": "credit-card",
+  "magnifyingglass": "search",
+  "xmark.circle.fill": "cancel",
+  "wifi": "wifi",
+  "wifi.slash": "wifi-off",
+  "person.fill": "person",
+  "mic.fill": "mic",
+  "sun.max.fill": "wb-sunny",
+  "moon.fill": "nights-stay",
 } as IconMapping;
 
 /**

@@ -8,6 +8,7 @@ export const callEventTypeSchema = z.enum([
   "preflight_completed",
   "provider_requested",
   "provider_status",
+  "provider_failover",
   "conversation_turn",
   "tool_action",
   "outcome_extracted",

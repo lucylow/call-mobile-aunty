@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 
+import { BackLink } from "@/components/call-aunty/back-link";
+import { ScreenHeader } from "@/components/call-aunty/screen-header";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useLanguage } from "@/contexts/language-context";
@@ -50,17 +52,12 @@ export default function LanguageScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
-          <IconSymbol name="chevron.left" size={18} color={colors.coral} />
-          <Text style={{ color: colors.coral }}>{translate("common.back")}</Text>
-        </Pressable>
+        <BackLink label={translate("common.back")} onPress={() => router.back()} />
 
-        <Text style={[styles.title, { color: colors.foreground }]}>
-          {translate("settings.chooseLanguage")}
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>
-          {translate("settings.chooseLanguageBody")}
-        </Text>
+        <ScreenHeader
+          title={translate("settings.chooseLanguage")}
+          subtitle={translate("settings.chooseLanguageBody")}
+        />
         <Text style={[styles.note, { color: colors.muted }]}>
           {translate("settings.translationPartial")}
         </Text>
@@ -68,17 +65,17 @@ export default function LanguageScreen() {
           {translate("calls.uiNotCallLanguage")}
         </Text>
 
-        <TextInput
-          accessibilityLabel={translate("common.search")}
-          placeholder={translate("common.search")}
-          placeholderTextColor={colors.muted}
-          value={query}
-          onChangeText={setQuery}
-          style={[
-            styles.search,
-            { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface },
-          ]}
-        />
+        <View style={[styles.searchWrap, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <IconSymbol name="magnifyingglass" size={18} color={colors.muted} />
+          <TextInput
+            accessibilityLabel={translate("common.search")}
+            placeholder={translate("common.search")}
+            placeholderTextColor={colors.muted}
+            value={query}
+            onChangeText={setQuery}
+            style={[styles.search, { color: colors.foreground }]}
+          />
+        </View>
 
         {options.map((row) => {
           const selected = language === row.code;
@@ -88,7 +85,7 @@ export default function LanguageScreen() {
               key={row.code}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
-              accessibilityLabel={`${row.nativeDisplayName}, ${englishName}`}
+              accessibilityLabel={`${row.nativeDisplayName}, ${englishName}${selected ? `, ${translate("common.current")}` : ""}`}
               onPress={() => void select(row.code)}
               style={[
                 styles.option,
@@ -103,27 +100,27 @@ export default function LanguageScreen() {
                 <Text style={[styles.english, { color: colors.muted }]}>{englishName}</Text>
                 <Text style={[styles.example, { color: colors.muted }]}>{EXAMPLES[row.code]}</Text>
                 <View style={styles.metaRow}>
-                  <Text style={[styles.badge, { color: colors.primary }]}>
-                    {row.translationStatus === "complete"
-                      ? "✓"
-                      : row.translationStatus === "partial"
-                        ? "~"
-                        : "…"}
-                    {" "}
-                    {row.translationStatus}
-                  </Text>
+                  <View style={[styles.pill, { backgroundColor: tints.lavenderSoft }]}>
+                    <Text style={[styles.badge, { color: colors.primary }]}>
+                      {row.translationStatus}
+                    </Text>
+                  </View>
                   {row.offlinePackAvailable ? (
-                    <Text style={[styles.badge, { color: colors.success }]}>offline</Text>
+                    <View style={[styles.pill, { backgroundColor: tints.mintSoft }]}>
+                      <Text style={[styles.badge, { color: colors.success }]}>offline</Text>
+                    </View>
                   ) : null}
                   {row.direction === "rtl" ? (
-                    <Text style={[styles.badge, { color: colors.warning }]}>RTL</Text>
+                    <View style={[styles.pill, { backgroundColor: tints.amberSoft }]}>
+                      <Text style={[styles.badge, { color: colors.warning }]}>RTL</Text>
+                    </View>
                   ) : null}
                 </View>
               </View>
               {selected ? (
-                <Text style={[styles.selected, { color: colors.coral }]}>
-                  {translate("common.current")}
-                </Text>
+                <View style={[styles.check, { backgroundColor: colors.coral }]}>
+                  <IconSymbol name="checkmark.circle.fill" size={18} color="#FFFFFF" />
+                </View>
               ) : null}
             </Pressable>
           );
@@ -135,16 +132,23 @@ export default function LanguageScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: 10, paddingBottom: 40, gap: 12 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8 },
-  title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
-  subtitle: { fontSize: 15, lineHeight: 22 },
   note: { fontSize: 13, lineHeight: 18 },
-  search: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-  option: { borderWidth: 1, borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  searchWrap: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  search: { flex: 1, paddingVertical: 12, fontSize: 15 },
+  option: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 10 },
   native: { fontSize: 20, fontWeight: "800" },
   english: { fontSize: 13 },
   example: { fontSize: 13, lineHeight: 18, fontStyle: "italic" },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   badge: { fontSize: 11, fontWeight: "700", textTransform: "capitalize" },
-  selected: { fontSize: 12, fontWeight: "800" },
+  check: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 });

@@ -1,15 +1,13 @@
+import { Platform } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { FollowUpDraft } from "@/lib/follow-up";
 
 const QUEUE_KEY = "call-aunty/sync-queue";
 const SYNC_META_KEY = "call-aunty/sync-meta";
 
-function getSecureStore() {
-  return require("expo-secure-store") as typeof import("expo-secure-store");
-}
-
 async function readQueueRaw(): Promise<string | null> {
-  return typeof document !== "undefined" ? AsyncStorage.getItem(QUEUE_KEY) : getSecureStore().getItemAsync(QUEUE_KEY);
+  return Platform.OS === "web" ? AsyncStorage.getItem(QUEUE_KEY) : SecureStore.getItemAsync(QUEUE_KEY);
 }
 
 export function isValidSyncQueueItem(item: unknown): item is SyncQueueItem {
@@ -38,11 +36,11 @@ async function readQueueItemsStrict(): Promise<SyncQueueItem[]> {
 
 async function writeQueueRaw(value: string): Promise<void> {
   try {
-    if (typeof document !== "undefined") {
+    if (Platform.OS === "web") {
       await AsyncStorage.setItem(QUEUE_KEY, value);
       return;
     }
-    await getSecureStore().setItemAsync(QUEUE_KEY, value, { requireAuthentication: false });
+    await SecureStore.setItemAsync(QUEUE_KEY, value, { requireAuthentication: false });
   } catch (error) {
     throw error instanceof Error ? error : new Error("Failed to save sync queue");
   }
@@ -102,7 +100,11 @@ export async function saveSyncQueue(items: SyncQueueItem[]): Promise<void> {
 }
 
 export function getPendingSyncCount(items: SyncQueueItem[]) {
-  return items.filter((item) => item.status !== "synced").length;
+  let pending = 0;
+  for (const item of items) {
+    if (item.status !== "synced") pending += 1;
+  }
+  return pending;
 }
 
 export async function saveLastSyncAt(timestamp = new Date().toISOString()): Promise<boolean> {
@@ -130,11 +132,15 @@ export function formatLastSync(timestamp: string | null) {
 }
 
 export function getQueueSummary(items: SyncQueueItem[]) {
-  return {
-    queued: items.filter((item) => item.status === "queued").length,
-    retrying: items.filter((item) => item.status === "retrying").length,
-    synced: items.filter((item) => item.status === "synced").length,
-  };
+  let queued = 0;
+  let retrying = 0;
+  let synced = 0;
+  for (const item of items) {
+    if (item.status === "queued") queued += 1;
+    else if (item.status === "retrying") retrying += 1;
+    else if (item.status === "synced") synced += 1;
+  }
+  return { queued, retrying, synced };
 }
 
 export function getQueueStatusLabel(status: SyncQueueItem["status"]) {

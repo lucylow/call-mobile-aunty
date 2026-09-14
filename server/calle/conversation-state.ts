@@ -27,8 +27,14 @@ export type ConversationEvent =
 
 const LEGAL: Record<ConversationState, readonly ConversationState[]> = {
   greeting: ["identity_check", "escalation", "terminated", "voicemail"],
-  identity_check: ["purpose_confirmation", "escalation", "terminated"],
-  purpose_confirmation: ["information_exchange", "appointment_discussion", "escalation", "terminated"],
+  identity_check: ["purpose_confirmation", "escalation", "terminated", "voicemail"],
+  purpose_confirmation: [
+    "information_exchange",
+    "appointment_discussion",
+    "escalation",
+    "terminated",
+    "voicemail",
+  ],
   information_exchange: ["appointment_discussion", "concern_detection", "action_confirmation", "escalation", "closing"],
   appointment_discussion: ["action_confirmation", "concern_detection", "closing", "escalation"],
   concern_detection: ["escalation", "information_exchange", "action_confirmation"],
