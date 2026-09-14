@@ -31,7 +31,7 @@ export function FeedbackToast({ visible, message, tone = "neutral", onHide, dura
     tone === "success" ? colors.success : tone === "warning" ? colors.warning : tone === "error" ? colors.error : colors.primary;
 
   return (
-    <View pointerEvents="none" style={styles.wrap} accessibilityLiveRegion="polite" accessibilityRole="text">
+    <View style={[styles.wrap, { pointerEvents: "none" }]} accessibilityLiveRegion="polite" accessibilityRole="text">
       <View style={[styles.toast, cardElevation, { backgroundColor, borderColor: colors.border }]}>
         <Text style={[styles.message, { color: textColor }]}>{message}</Text>
       </View>
